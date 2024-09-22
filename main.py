@@ -1,12 +1,23 @@
 #!/usr/bin/env python3
 
-from tinygrad.nn import Conv2d, BatchNorm, ConvTranspose2d
+import sys
+import os
+import numpy
+from PIL import Image
+from random import shuffle
+from tinygrad import *
 
 """
 An implementation of U-Net using tinygrad.
 Based on https://arxiv.org/abs/1505.04597 and https://github.com/milesial/Pytorch-UNet.
 Fueled by truckloads of Yerbata, way too many Serbian movies and ADHD meds.
 """
+
+# TODO)) Investigate whether adding the dice score to the loss
+# (like in the Pytorch-UNet implementation) helps with training.
+# TODO)) Find out what kind of weight map generation scheme would be
+# effective on ultrasound images.
+# TODO)) Understand what kind of deformations are done to the data in the whitepaper.
 
 class DoubleConv:
   """
@@ -84,3 +95,32 @@ class UNet():
    + self.e1.weights() + self.e2.weights() + self.e3.weights() + self.e4.weights()
    + self.d1.weights() + self.d2.weights() + self.d3.weights() + self.d4.weights()
    + self.final.weights()
+
+
+def get_data():
+  root = "data"
+  dirs = ["benign", "malignant", "normal"]
+  data = { "mask": [], "image": [] }
+  for dir in dirs:
+    current_dir = os.path.join("data", dir)
+    files = os.listdir(current_dir)
+    for filename in files:
+      with Image.open(os.path.join(current_dir, filename)) as image:
+        image = numpy.asarray(image)
+        if filename.split(".")[0][-5:] == "_mask":
+          data["mask"].append(image)
+        else:
+          data["image"].append(image)
+
+  # Check whether all mask images consist of just two values (black and white pixels).
+  for image in data["mask"]:
+    assert numpy.unique(image).size() == 2
+
+
+def train():
+  data = get_data()
+  # shuffle(data)
+  # train_size = len(data) * 0.6
+  # train, val = data[:train_size], data[train_size:]
+
+train()
