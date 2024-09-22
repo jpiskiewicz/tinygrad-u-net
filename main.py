@@ -8,10 +8,13 @@ Based on https://arxiv.org/abs/1505.04597 and https://github.com/milesial/Pytorc
 Fueled by truckloads of Yerbata, way too many Serbian movies and ADHD meds.
 """
 
-# Each convolutional layer of the U-Net consists of two conv blocks
-# followed by a max pooling operation.
-# Each conv block is made out of one 3x3 kernel convolution operation, batch norm and a ReLu.
 class DoubleConv:
+  """
+  Each convolutional layer of the U-Net consists of two conv blocks
+  followed by a max pooling operation.
+  Each conv block is made out of one 3x3 kernel convolution operation, batch norm and a ReLu.
+  """
+
   def __init__(self, in_chan, out_chan):
     self.conv1 = Conv2d(in_chan, out_chan, 3, bias=False)
     self.bn = BatchNorm(out_chan)
@@ -25,12 +28,20 @@ class DoubleConv:
     x = self.bn(x)
     return x.relu()
 
+  def weights(self):
+    return [self.conv1.weight, self.conv2.weight]
+
+
 class EncoderLayer:
   def __init__(self, in_chan, out_chan):
     self.conv = DoubleConv(in_chan, out_chan)
 
   def __call__(self, x):
     return self.conv(x.max_pool2d())
+
+  def weights(self):
+    return self.conv.weights()
+
 
 class DecoderLayer:
   def __init__(self, in_chan, out_chan):
@@ -40,6 +51,9 @@ class DecoderLayer:
   def __call__(self, x):
     x = self.transpose_conv(x)
     return self.conv(x)
+
+  def weights(self):
+   return [self.transpose_conv.weight, self.conv.weights()]
 
 class UNet():
   def __init__(self):
@@ -64,3 +78,9 @@ class UNet():
     x = self.d3(x)
     x = self.d4(x)
     return self.final(x)
+
+  def weights(self):
+   return self.initial.weights()
+   + self.e1.weights() + self.e2.weights() + self.e3.weights() + self.e4.weights()
+   + self.d1.weights() + self.d2.weights() + self.d3.weights() + self.d4.weights()
+   + self.final.weights()
