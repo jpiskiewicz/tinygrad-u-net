@@ -3,9 +3,11 @@
 import sys
 import os
 import numpy
+import re
 from PIL import Image
 from random import shuffle
 from tinygrad import *
+from input_transform import preprocess
 
 """
 An implementation of U-Net using tinygrad.
@@ -96,31 +98,23 @@ class UNet():
    + self.d1.weights() + self.d2.weights() + self.d3.weights() + self.d4.weights()
    + self.final.weights()
 
-
 def get_data():
   root = "data"
   dirs = ["benign", "malignant", "normal"]
-  data = { "mask": [], "image": [] }
+  data = []
   for dir in dirs:
     current_dir = os.path.join("data", dir)
-    files = os.listdir(current_dir)
+    files = filter(lambda x: re.search("_mask*", x) is None, os.listdir(current_dir))
     for filename in files:
-      with Image.open(os.path.join(current_dir, filename)) as image:
-        image = numpy.asarray(image)
-        if filename.split(".")[0][-5:] == "_mask":
-          data["mask"].append(image)
-        else:
-          data["image"].append(image)
-
-  # Check whether all mask images consist of just two values (black and white pixels).
-  for image in data["mask"]:
-    assert numpy.unique(image).size() == 2
+      data.append(preprocess(os.path.join(current_dir, filename)))
+  return data
 
 
 def train():
   data = get_data()
-  # shuffle(data)
-  # train_size = len(data) * 0.6
-  # train, val = data[:train_size], data[train_size:]
+  shuffle(data)
+  train_size = int(len(data) * 0.6)
+  train, val = data[:train_size], data[train_size:]
 
-train()
+if __name__ == "__main__":
+  train()
