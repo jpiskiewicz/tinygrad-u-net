@@ -5,6 +5,7 @@ import sys
 import cv2
 import os
 import glob
+from tinygrad.tensor import Tensor
 from PIL import Image
 
 
@@ -19,7 +20,7 @@ def convert_and_crop(image: Image.Image) -> numpy.ndarray:
   return numpy.array(image.crop((center[0] - 240, center[1] - 240, center[0] + 240, center[1] + 240)))
 
 
-def deform(image: numpy.ndarray, mask: numpy.ndarray) -> tuple[numpy.ndarray, numpy.ndarray]:
+def deform(image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
   grid_size = 3
   sd = 10
   height, width = image.shape
@@ -55,7 +56,7 @@ def deform(image: numpy.ndarray, mask: numpy.ndarray) -> tuple[numpy.ndarray, nu
     borderMode=cv2.BORDER_REFLECT
   )
 
-  return image, mask
+  return Tensor(image), Tensor(mask)
 
 
 def get_mask(path: str) -> numpy.ndarray:
@@ -69,7 +70,7 @@ def get_mask(path: str) -> numpy.ndarray:
   return mask
 
 
-def preprocess(path: str) -> tuple[numpy.ndarray, numpy.ndarray]:
+def preprocess(path: str) -> tuple[Tensor, Tensor]:
   image = Image.open(path)
   return deform(convert_and_crop(image), get_mask(path))
 

@@ -6,7 +6,9 @@ import numpy
 import re
 from PIL import Image
 from random import shuffle
-from tinygrad import *
+from tinygrad.nn import Conv2d, BatchNorm, ConvTranspose2d
+from tinygrad.tensor import Tensor
+from tinygrad.nn.optim import SGD
 from input_transform import preprocess
 
 """
@@ -19,7 +21,8 @@ Fueled by truckloads of Yerbata, way too many Serbian movies and ADHD meds.
 # (like in the Pytorch-UNet implementation) helps with training.
 # TODO)) Find out what kind of weight map generation scheme would be
 # effective on ultrasound images.
-# TODO)) Understand what kind of deformations are done to the data in the whitepaper.
+# TODO)) Warping error, Rand Error, Pixel Error.
+# DONE: Understand what kind of deformations are done to the data in the whitepaper.
 
 class DoubleConv:
   """
@@ -92,29 +95,43 @@ class UNet():
     x = self.d4(x)
     return self.final(x)
 
+  @property
   def weights(self):
    return self.initial.weights()
    + self.e1.weights() + self.e2.weights() + self.e3.weights() + self.e4.weights()
    + self.d1.weights() + self.d2.weights() + self.d3.weights() + self.d4.weights()
    + self.final.weights()
 
-def get_data():
+
+type ImageWithGroundTruth = tuple[Tensor, Tensor]
+def get_data() -> tuple[list[ImageWithGroundTruth], list[ImageWithGroundTruth]]:
   root = "data"
   dirs = ["benign", "malignant", "normal"]
-  data = []
+  data: list[tuple[Tensor, Tensor]] = []
   for dir in dirs:
-    current_dir = os.path.join("data", dir)
+    current_dir = os.path.join(root, dir)
     files = filter(lambda x: re.search("_mask*", x) is None, os.listdir(current_dir))
     for filename in files:
       data.append(preprocess(os.path.join(current_dir, filename)))
-  return data
-
-
-def train():
-  data = get_data()
   shuffle(data)
   train_size = int(len(data) * 0.6)
   train, val = data[:train_size], data[train_size:]
+  return train, val
+
 
 if __name__ == "__main__":
-  train()
+  net = UNet()
+  optimizer = SGD(net.weights, 0.01, 0.99)
+
+  train, val = get_data()
+
+  with Tensor.train():
+    for step in range(2000):
+      i = numpy.random.randint(0, len(train))
+      batch, truth = train[i]
+      print("step", step, "batch", batch, "ground truth", truth)
+      out = net(batch)
+      loss = out.softmax().cross_entropy(truth)
+      optimizer.zero_grad()
+      loss.backward()
+      optimizer.step()
