@@ -10,6 +10,7 @@ from tinygrad.nn import Conv2d, BatchNorm, ConvTranspose2d
 from tinygrad.tensor import Tensor
 from tinygrad.nn.optim import SGD
 from input_transform import preprocess
+from error import pixel_error
 
 """
 An implementation of U-Net using tinygrad.
@@ -85,6 +86,7 @@ class UNet():
     self.final = Conv2d(64, 2, 1)
 
   def __call__(self, x):
+    x = self.initial(x)
     x = self.e1(x)
     x = self.e2(x)
     x = self.e3(x)
@@ -129,8 +131,9 @@ if __name__ == "__main__":
     for step in range(2000):
       i = numpy.random.randint(0, len(train))
       batch, truth = train[i]
-      print("step", step, "batch", batch, "ground truth", truth)
       out = net(batch)
+      print(out.numpy())
+      print("step:", step, "pixel error:", pixel_error(out, truth))
       loss = out.softmax().cross_entropy(truth)
       optimizer.zero_grad()
       loss.backward()
