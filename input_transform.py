@@ -7,12 +7,18 @@ import os
 import glob
 from tinygrad.tensor import Tensor
 from PIL import Image
+from multiprocessing import Pool
+from tqdm import tqdm
+from typing import Callable
 
 
 """
 This contains the logic for smooth image deformation (https://en.wikipedia.org/wiki/Homotopy)
 using random displacement vectors on a coarse 3x3 grid (see section 3.1 in the U-Net paper).
 """
+
+type ImageWithGroundTruth = tuple[Tensor, Tensor]
+
 
 def convert_and_crop(image: Image.Image) -> numpy.ndarray:
   image = image.convert("L")
@@ -56,13 +62,12 @@ def deform(image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
     borderMode=cv2.BORDER_REFLECT
   )
 
-  return Tensor(image), Tensor(mask)
+  return Tensor(image).reshape(1, 1, width, height), Tensor(mask).reshape(1, 1, width, height)
 
 
 def get_mask(path: str) -> numpy.ndarray:
   root, ext = os.path.splitext(path)
   filenames = glob.glob(root + "_mask*")
-  print("get_mask; filenames:", filenames)
   read = lambda filename: convert_and_crop(Image.open(filename))
   mask = read(filenames[0])
   for filename in filenames[1:]:
@@ -70,19 +75,18 @@ def get_mask(path: str) -> numpy.ndarray:
   return mask
 
 
-def preprocess(path: str) -> tuple[Tensor, Tensor]:
+def preprocess_internal(path: str) -> ImageWithGroundTruth:
   image = Image.open(path)
   return deform(convert_and_crop(image), get_mask(path))
 
 
-if __name__ == "__main__":
-  """
-  This module can be invoked from a command line with path to image file.
-  It then outputs an edited image at specified output path.
-  This has no use other than testing.
-  """
-  input, output = sys.argv[1:3]
-  processed = [Image.fromarray(x) for x in preprocess(input)]
-  image, mask = processed
-  image.save(output + ".png")
-  mask.save(output + "_mask.png")
+def preprocess(files: list[str]) -> list[ImageWithGroundTruth]:
+  progress = tqdm(total=len(files), desc="Loading dataset")
+  data = []
+  with Pool(8) as pool:
+    async_result = pool.map(preprocess_internal, files)
+    for res in async_result:
+      progress.update()
+      data.append(res)
+    progress.close()
+    return data

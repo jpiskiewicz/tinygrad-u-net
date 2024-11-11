@@ -9,8 +9,9 @@ from random import shuffle
 from tinygrad.nn import Conv2d, BatchNorm, ConvTranspose2d
 from tinygrad.tensor import Tensor
 from tinygrad.nn.optim import SGD
-from input_transform import preprocess
+from input_transform import preprocess, ImageWithGroundTruth
 from error import pixel_error
+
 
 """
 An implementation of U-Net using tinygrad.
@@ -105,16 +106,14 @@ class UNet():
    + self.final.weights()
 
 
-type ImageWithGroundTruth = tuple[Tensor, Tensor]
 def get_data() -> tuple[list[ImageWithGroundTruth], list[ImageWithGroundTruth]]:
-  root = "data"
   dirs = ["benign", "malignant", "normal"]
-  data: list[tuple[Tensor, Tensor]] = []
+  files = []
   for dir in dirs:
-    current_dir = os.path.join(root, dir)
-    files = filter(lambda x: re.search("_mask*", x) is None, os.listdir(current_dir))
-    for filename in files:
-      data.append(preprocess(os.path.join(current_dir, filename)))
+    current_dir = os.path.join("data", dir)
+    batch = [os.path.join(current_dir, x) for x in os.listdir(current_dir)]
+    files = [*files, *filter(lambda x: re.search("_mask*", x) is None, batch)]
+  data = preprocess(files)
   shuffle(data)
   train_size = int(len(data) * 0.6)
   train, val = data[:train_size], data[train_size:]

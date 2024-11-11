@@ -22,4 +22,5 @@ def pixel_error(t1: Tensor, t2: Tensor) -> float:
   Pixel error is just the Euclidean distance between two binary-valued
   tensors.
   """
+  print(t1.shape, t2.shape)
   return (t1 - t2).square().mean().numpy().item()
