@@ -23,7 +23,7 @@ type ImageWithGroundTruth = tuple[Tensor, Tensor]
 def convert_and_crop(image: Image.Image) -> numpy.ndarray:
   image = image.convert("L")
   center = [x/2 for x in image.size]
-  return numpy.array(image.crop((center[0] - 240, center[1] - 240, center[0] + 240, center[1] + 240)))
+  return numpy.array(image.crop((center[0] - 286, center[1] - 286, center[0] + 286, center[1] + 286)))
 
 
 def deform(image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
