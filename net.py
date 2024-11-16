@@ -51,8 +51,10 @@ class DecoderLayer:
     x = self.transpose_conv(x)
     width1, width2 = c.shape[2], x.shape[2]
     start = (width1 - width2) // 2
-    crop_section = (None, None, (start, width1 - start), (start, width1 - start))
-    c = c.shrink(crop_section) # TODO)) Fix the typing here
+    end = (width1 - start)
+    assert isinstance(start, sint) and isinstance(end, sint)
+    crop = (start, end)
+    c = c.shrink((None, None, crop, crop))
     x = x.cat(c, dim = 1)
     return self.conv(x)
 
