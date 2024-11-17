@@ -6,7 +6,7 @@ import numpy
 import re
 from PIL import Image
 from random import shuffle
-from tinygrad.tensor import Tensor, Function
+from tinygrad.tensor import Tensor
 from tinygrad.nn.optim import SGD
 from input_transform import preprocess, ImageWithGroundTruth
 from net import UNet
