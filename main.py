@@ -34,7 +34,7 @@ def get_test_predictor(net: UNet, batch: ImageWithGroundTruth):
 
 if __name__ == "__main__":
   net = UNet()
-  optimizer = SGD(net.weights, 0.1, 0.99)
+  optimizer = SGD(net.weights, 0.01, 0.99)
 
   dataset = Dataset()
 
