@@ -1,6 +1,7 @@
 from tinygrad.nn import Conv2d, BatchNorm, ConvTranspose2d
 from tinygrad.tensor import Tensor
 from tinygrad.ops import sint
+from util import crop
 
 class DoubleConv:
   """
@@ -49,12 +50,7 @@ class DecoderLayer:
     from expanding path.
     """
     x = self.transpose_conv(x)
-    width1, width2 = c.shape[2], x.shape[2]
-    start = (width1 - width2) // 2
-    end = (width1 - start)
-    assert isinstance(start, sint) and isinstance(end, sint)
-    crop = (start, end)
-    c = c.shrink((None, None, crop, crop))
+    c = crop(c, x.shape[2])
     x = x.cat(c, dim = 1)
     return self.conv(x)
 

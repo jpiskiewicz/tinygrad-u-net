@@ -17,10 +17,9 @@ def  rand_error(t1: Tensor, t2: Tensor) -> float:
   return -1
 
 
-def pixel_error(t1: Tensor, t2: Tensor) -> float:
+def pixel_error(out: Tensor, truth: Tensor) -> float:
   """
   Pixel error is just the Euclidean distance between two binary-valued
   tensors.
   """
-  print(t1.shape, t2.shape)
-  return (t1 - t2).square().mean().numpy().item()
+  return (out - truth).square().mean().numpy().item()

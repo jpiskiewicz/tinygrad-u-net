@@ -20,10 +20,10 @@ using random displacement vectors on a coarse 3x3 grid (see section 3.1 in the U
 type ImageWithGroundTruth = tuple[Tensor, Tensor]
 
 
-def convert_and_crop(image: Image.Image) -> numpy.ndarray:
-  image = image.convert("L")
+def convert_and_crop(image: Image.Image, mode: str = "L") -> numpy.ndarray:
+  image = image.convert(mode)
   center = [x/2 for x in image.size]
-  return numpy.array(image.crop((center[0] - 286, center[1] - 286, center[0] + 286, center[1] + 286)))
+  return numpy.array(image.crop((center[0] - 286, center[1] - 286, center[0] + 286, center[1] + 286))).astype(numpy.uint8)
 
 
 def deform(image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
@@ -68,7 +68,7 @@ def deform(image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
 def get_mask(path: str) -> numpy.ndarray:
   root, ext = os.path.splitext(path)
   filenames = glob.glob(root + "_mask*")
-  read = lambda filename: convert_and_crop(Image.open(filename))
+  read = lambda filename: convert_and_crop(Image.open(filename), "1")
   mask = read(filenames[0])
   for filename in filenames[1:]:
     mask += read(filename)

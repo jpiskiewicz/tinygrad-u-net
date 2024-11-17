@@ -6,11 +6,12 @@ import numpy
 import re
 from PIL import Image
 from random import shuffle
-from tinygrad.tensor import Tensor
+from tinygrad.tensor import Tensor, Function
 from tinygrad.nn.optim import SGD
 from input_transform import preprocess, ImageWithGroundTruth
 from net import UNet
 from error import pixel_error
+from util import crop
 
 
 """
@@ -51,8 +52,11 @@ if __name__ == "__main__":
       i = numpy.random.randint(0, len(train))
       batch, truth = train[i]
       out = net(batch)
-      print(out.numpy())
+      if step % 10 == 0:
+        Image.fromarray(out.numpy()[0][0] > 0).save(f"out/out_{step}.png")
+      truth = crop(truth, out.shape[2])
       print("step:", step, "pixel error:", pixel_error(out, truth))
       loss = out.softmax().cross_entropy(truth)
       optimizer.zero_grad()
+      loss.backward()
       optimizer.step()
