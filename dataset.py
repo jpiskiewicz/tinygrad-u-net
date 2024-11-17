@@ -30,7 +30,6 @@ class Dataset:
     train_size = int(len(data) * 0.6)
     self.train, self.val = data[:train_size], data[train_size:]
 
-
   def convert_and_crop(self, image: Image.Image, mode: str = "L", feature_id: Union[int, None] = None) -> numpy.ndarray:
     image = image.convert(mode)
     center = [x/2 for x in image.size]
@@ -39,7 +38,6 @@ class Dataset:
       assert feature_id is not None
       cropped[cropped > 0] += feature_id
     return cropped
-
 
   def deform(self, image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
     """
@@ -83,7 +81,6 @@ class Dataset:
 
     return Tensor(image).reshape(1, 1, width, height), Tensor(mask).reshape(1, 1, width, height)
 
-
   def get_mask(self, path: str) -> numpy.ndarray:
     root, ext = os.path.splitext(path)
     filenames = glob.glob(root + "_mask*")
@@ -93,7 +90,6 @@ class Dataset:
       mask += read(filename, i + 1)
     return mask
 
-
   def split_mask(self, mask: Tensor) -> Tensor:
     """
     Split feature mask which contains object IDs into two channels:
@@ -101,11 +97,9 @@ class Dataset:
     """
     return mask.cat(mask.clamp(Tensor.full(mask.shape, 0), Tensor.full(mask.shape, 1)), dim=1)
 
-
   def preprocess_internal(self, path: str) -> ImageWithGroundTruth:
     image = Image.open(path)
     return self.deform(self.convert_and_crop(image), self.get_mask(path))
-
 
   def preprocess(self, files: list[str]) -> list[ImageWithGroundTruth]:
     progress = tqdm(total=len(files), desc="Loading dataset")
@@ -117,7 +111,6 @@ class Dataset:
         data.append(res)
       progress.close()
       return data
-
 
   def choose(self) -> ImageWithGroundTruth:
     i = numpy.random.randint(0, len(self.train))

@@ -35,13 +35,11 @@ def get_test_predictor(net: UNet, batch: ImageWithGroundTruth):
 if __name__ == "__main__":
   net = UNet()
   optimizer = SGD(net.weights, 0.01, 0.99)
-
   dataset = Dataset()
-
   save_test_prediction = get_test_predictor(net, dataset.choose())
 
   with Tensor.train():
-    for step in range(2000):
+    for step in range(100000):
       batch, truth = dataset.choose()
       out = net(batch)
       truth = crop(truth, out.shape[2])
@@ -49,6 +47,8 @@ if __name__ == "__main__":
       print("step:", step, "loss:", loss.numpy(), "pixel error:", pixel_error(out, truth))
       if step % 100 == 0:
         save_test_prediction(step)
+      if step % 1000 == 0:
+        net.save_state()
       optimizer.zero_grad()
       loss.backward()
       optimizer.step()

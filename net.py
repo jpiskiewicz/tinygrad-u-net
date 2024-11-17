@@ -1,7 +1,9 @@
 from tinygrad.nn import Conv2d, BatchNorm, ConvTranspose2d
+from tinygrad.nn.state import safe_save, get_state_dict
 from tinygrad.tensor import Tensor
 from tinygrad.ops import sint
 from util import crop
+
 
 class DoubleConv:
   """
@@ -81,6 +83,9 @@ class UNet():
     x = self.d3(x, x2)
     x = self.d4(x, x1)
     return self.final(x)
+
+  def save_state(self):
+    safe_save(get_state_dict(self), "checkpoint.safetensor")
 
   @property
   def weights(self) -> list[Tensor]:
