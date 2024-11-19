@@ -30,6 +30,7 @@ def get_test_predictor(net: UNet, batch: ImageWithGroundTruth):
   Image.fromarray(image.numpy()[0][0]).save("out/batch.png")
   Image.fromarray(truth.numpy()[0][0].astype(bool)).save("out/truth.png")
   def f(step: int, loss: Tensor):
+    Tensor.training = False
     out = net(image)
     print("step:", step, "loss:", loss.numpy(), "pixel error:", pixel_error(out, crop(truth, out.shape[2])))
     Image.fromarray(out.numpy()[0][0] > 0).save(f"out/out_{step}.png")
@@ -45,6 +46,7 @@ if __name__ == "__main__":
 
   @TinyJit
   def perform_train_step():
+    Tensor.training = True
     batch, truth = dataset.choose()
     out = net(batch)
     truth = crop(truth, out.shape[2])
@@ -55,10 +57,8 @@ if __name__ == "__main__":
     return loss
 
   for step in range(100000):
-    Tensor.training = True
     loss = perform_train_step()
     if step % 100 == 0:
-      Tensor.training = False
       save_test_prediction(step, loss)
     if step % 1000 == 0:
       net.save_state()

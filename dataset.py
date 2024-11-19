@@ -1,48 +1,43 @@
 #!/usr/bin/env python3
 
 import numpy
-import sys
 import cv2
 import os
-import re
 import glob
 from tinygrad.tensor import Tensor
 from PIL import Image
 from multiprocessing import Pool
 from tqdm import tqdm
 from typing import Union
-from random import shuffle
-
-
-type ImageWithGroundTruth = tuple[Tensor, Tensor]
 
 
 class Dataset:
   def __init__(self):
     dirs = ["benign", "malignant", "normal"]
-    files = []
-    for dir in dirs:
-      current_dir = os.path.join("data", dir)
-      batch = [os.path.join(current_dir, x) for x in os.listdir(current_dir)]
-      files = [*files, *filter(lambda x: re.search("_mask*", x) is None, batch)]
-    data = self.preprocess(files)
-    shuffle(data)
-    train_size = int(len(data) * 0.6)
-    self.train, self.val = data[:train_size], data[train_size:]
+    files = self.get_files(dirs)
+    images, masks = map(lambda x: self.read_image(x), files[0]), map(lambda x: self.read_image(x, "1"), files[1])
+    masks = self.combine_masks(masks)
 
-  def convert_and_crop(self, image: Image.Image, mode: str = "L", feature_id: Union[int, None] = None) -> numpy.ndarray:
-    image = image.convert(mode)
+  def collect_glob(self, dirs: list[str], is_mask: bool = False) -> list[str]:
+    files = []
+    for x in dirs: files += glob.glob(f"data/{x}/*{'' if is_mask else '[!_]'}).png")
+    return files
+
+  def get_files(self, dirs: list[str]) -> tuple[list[str], list[str]]:
+    return self.collect_glob(dirs), self.collect_glob(dirs, True)
+
+  def read_image(self, filename: str, mode: str = "L") -> numpy.ndarray:
+    image = Image.open(filename).convert(mode)
     center = [x/2 for x in image.size]
     cropped = numpy.array(image.crop((center[0] - 286, center[1] - 286, center[0] + 286, center[1] + 286))).astype(numpy.uint8)
-    if mode == "1":
-      assert feature_id is not None
-      cropped[cropped > 0] += feature_id
     return cropped
 
   def deform(self, image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
     """
     This contains the logic for smooth image deformation (https://en.wikipedia.org/wiki/Homotopy)
     using random displacement vectors on a coarse 3x3 grid (see section 3.1 in the U-Net paper).
+
+    Rewrite this to be just one big operation on a multidimensional Tensor.
     """
     grid_size = 3
     sd = 10
@@ -80,40 +75,3 @@ class Dataset:
     )
 
     return Tensor(image).reshape(1, 1, width, height), Tensor(mask).reshape(1, 1, width, height)
-
-  def get_mask(self, path: str) -> numpy.ndarray:
-    root, ext = os.path.splitext(path)
-    filenames = glob.glob(root + "_mask*")
-    read = lambda filename, i: self.convert_and_crop(Image.open(filename), "1", i)
-    mask = read(filenames[0], 0)
-    for i, filename in enumerate(filenames[1:]):
-      mask += read(filename, i + 1)
-    return mask
-
-  def split_mask(self, mask: Tensor) -> Tensor:
-    """
-    Split feature mask which contains object IDs into two channels:
-    binary channel and an integer-valued object ID channel.
-    """
-    return mask.cat(mask.clamp(Tensor.full(mask.shape, 0), Tensor.full(mask.shape, 1)), dim=1)
-
-  def preprocess_internal(self, path: str) -> ImageWithGroundTruth:
-    image = Image.open(path)
-    return self.deform(self.convert_and_crop(image), self.get_mask(path))
-
-  def preprocess(self, files: list[str]) -> list[ImageWithGroundTruth]:
-    progress = tqdm(total=len(files), desc="Loading dataset")
-    data = []
-    with Pool(8) as pool:
-      async_result = pool.map(self.preprocess_internal, files)
-      for res in async_result:
-        progress.update()
-        data.append(res)
-      progress.close()
-      return data
-
-  def choose(self) -> ImageWithGroundTruth:
-    i = numpy.random.randint(0, len(self.train))
-    batch, truth = self.train[i]
-    truth = self.split_mask(truth)
-    return batch, truth
