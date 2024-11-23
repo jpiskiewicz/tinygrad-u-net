@@ -1,7 +1,6 @@
 from tinygrad.nn import Conv2d, BatchNorm, ConvTranspose2d
 from tinygrad.nn.state import safe_save, get_state_dict
 from tinygrad.tensor import Tensor
-from tinygrad.ops import sint
 from util import crop
 
 

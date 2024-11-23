@@ -4,7 +4,7 @@ from PIL import Image
 from tinygrad import TinyJit
 from tinygrad.tensor import Tensor
 from tinygrad.nn.optim import SGD
-from dataset import Dataset, ImageWithGroundTruth
+from dataset import Dataset
 from net import UNet
 from error import pixel_error
 from util import crop
