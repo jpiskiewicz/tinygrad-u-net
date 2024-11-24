@@ -4,7 +4,7 @@ from PIL import Image
 from tinygrad import TinyJit
 from tinygrad.tensor import Tensor
 from tinygrad.nn.optim import SGD
-from dataset import Dataset
+from dataset import Dataset, save_image
 from net import UNet
 from error import pixel_error
 from util import crop
@@ -27,8 +27,8 @@ Fueled by truckloads of Yerbata, way too many Serbian movies and ADHD meds.
 def get_test_predictor(net: UNet, batch: ImageWithGroundTruth):
   # TODO)) Fix high memory usage in this function.
   image, truth = batch
-  Image.fromarray(image.numpy()[0][0]).save("out/batch.png")
-  Image.fromarray(truth.numpy()[0][0].astype(bool)).save("out/truth.png")
+  save_image(image, "out/batch.png")
+  save_image(truth, "out/truth.png", mask = True)
   def f(step: int, loss: Tensor):
     Tensor.training = False
     out = net(image)

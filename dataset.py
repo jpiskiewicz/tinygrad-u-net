@@ -8,7 +8,16 @@ from itertools import chain
 from functools import reduce
 from tinygrad.tensor import Tensor
 from PIL import Image
+from multiprocessing import Pool
 
+
+def save_image(image: Tensor, filename: str, mask: bool = False):
+  n = image.numpy()[0][0]
+  Image.fromarray(n.astype(bool) if mask else n).save(filename)
+
+IMAGE_SIZE = 572
+
+type ReadImageIn = list[tuple[str, bool]]
 
 class Dataset:
   def __init__(self):
@@ -22,22 +31,40 @@ class Dataset:
     """
     dirs = ["benign", "malignant", "normal"]
     image_filenames, mask_filenames = self.get_filenames(dirs)
-    images, masks = { x: self.read_image(x) for x in image_filenames }, { x: self.read_image(x, "1") for x in mask_filenames }
+    images, masks = self.to_tensors(self.read_files(image_filenames)), self.to_tensors(self.read_files(mask_filenames))
     masks = self.combine_masks(masks)
     assert len(images) == len(masks), f"len(images) = {len(images)}, len(masks) = {len(masks)}"
+
+    m = -1
+    for i, x in enumerate(masks):
+      if (mx := x.max().numpy().item()) > 1:
+        print(mx, x.min().numpy().item())
+        m = i
+    if m != -1:
+      save_image(masks[m], "combined.png", True)
+      save_image(images[m][1], "image.png")
+      print(images[m][0])
 
   def collect_glob(self, dirs: list[str], is_mask: bool = False) -> chain[str]:
     return chain.from_iterable(glob.glob(f"data/{x}/*){'_*' if is_mask else ''}.png") for x in dirs)
 
-  def get_filenames(self, dirs: list[str]) -> tuple[list[str], list[str]]: return sorted(self.collect_glob(dirs)), sorted(self.collect_glob(dirs, True))
+  def get_filenames(self, dirs: list[str]) -> tuple[ReadImageIn, ReadImageIn]:
+    return [(x, False) for x in sorted(self.collect_glob(dirs))], [(x, True) for x in sorted(self.collect_glob(dirs, True))]
 
-  def read_image(self, filename: str, mode: str = "L") -> Tensor:
+  def read_image(self, file: tuple[str, bool]) -> tuple[str, numpy.ndarray]:
+    filename, mode = file[0], "1" if file[1] else "L"
     image = Image.open(filename).convert(mode)
     center = [x/2 for x in image.size]
-    cropped = numpy.array(image.crop((center[0] - 286, center[1] - 286, center[0] + 286, center[1] + 286))).astype(numpy.uint8)
-    return Tensor(cropped)
+    cropped = numpy.array(image.crop((center[0] - IMAGE_SIZE / 2, center[1] - IMAGE_SIZE / 2, center[0] + IMAGE_SIZE / 2, center[1] + IMAGE_SIZE / 2))).astype(numpy.uint8)
+    return filename, cropped
 
-  def group_masks(self, masks: dict[str, Tensor]) -> list[list[Tensor]]:
+  def read_files(self, filenames) -> list[tuple[str, numpy.ndarray]]:
+    with Pool(8) as p:
+      return p.map(self.read_image, filenames)
+
+  def to_tensors(self, images: list[tuple[str, numpy.ndarray]]) -> list[Tensor]: return [(n, Tensor(x).reshape(1, 1, IMAGE_SIZE, IMAGE_SIZE)) for n, x in images]
+
+  def group_masks(self, masks: list[tuple[str, Tensor]]) -> list[list[Tensor]]:
     """
     Groups masks that belong to the same image and combines them together
     into a single object ID channel.
@@ -45,17 +72,17 @@ class Dataset:
     grouped_masks = []
     last_id: int = -1
     curr_mask = []
-    for k, v in masks.items():
+    for k, v in masks:
       curr_id = int(re.split(r"[()]", k)[1])
       if curr_id != last_id and last_id != -1:
         grouped_masks.append(curr_mask)
         curr_mask = []
       curr_mask.append(v)
       last_id = curr_id
-    print(grouped_masks[-1], curr_mask) # TODO)) Maybe append last curr_mask to grouped_masks
+    grouped_masks.append(curr_mask)
     return grouped_masks
 
-  def combine_masks(self, masks: dict[str, Tensor]) -> list[Tensor]: return [reduce(lambda v, e: v + e, x) for x in self.group_masks(masks)] # Fuuck not the Tensor | MathTrait bullshit again...
+  def combine_masks(self, masks: list[tuple[str, Tensor]]) -> list[Tensor]: return [reduce(lambda v, e: v + e, x) for x in self.group_masks(masks)] # Fuuck not the Tensor | MathTrait bullshit again...
 
   def deform(self, image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
     """
