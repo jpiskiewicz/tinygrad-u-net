@@ -31,7 +31,7 @@ class Dataset:
     """
     dirs = ["benign", "malignant", "normal"]
     image_filenames, mask_filenames = self.get_filenames(dirs)
-    images, masks = self.to_tensors(self.read_files(image_filenames)), self.to_tensors(self.read_files(mask_filenames))
+    images, masks = [x[0] for x in self.to_tensors(self.read_files(image_filenames))], self.to_tensors(self.read_files(mask_filenames))
     masks = self.combine_masks(masks)
     assert len(images) == len(masks), f"len(images) = {len(images)}, len(masks) = {len(masks)}"
 
