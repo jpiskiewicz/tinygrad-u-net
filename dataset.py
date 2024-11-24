@@ -35,16 +35,6 @@ class Dataset:
     masks = self.combine_masks(masks)
     assert len(images) == len(masks), f"len(images) = {len(images)}, len(masks) = {len(masks)}"
 
-    m = -1
-    for i, x in enumerate(masks):
-      if (mx := x.max().numpy().item()) > 1:
-        print(mx, x.min().numpy().item())
-        m = i
-    if m != -1:
-      save_image(masks[m], "combined.png", True)
-      save_image(images[m][1], "image.png")
-      print(images[m][0])
-
   def collect_glob(self, dirs: list[str], is_mask: bool = False) -> chain[str]:
     return chain.from_iterable(glob.glob(f"data/{x}/*){'_*' if is_mask else ''}.png") for x in dirs)
 
