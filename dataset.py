@@ -9,7 +9,6 @@ from functools import reduce
 from tinygrad.tensor import Tensor
 from PIL import Image
 from multiprocessing import Pool
-from random import shuffle
 
 
 def save_image(image: Tensor, filename: str, mask: bool = False):
@@ -39,8 +38,6 @@ class Dataset:
     print(f"Read {len(self.images)} images.")
     n = self.expand_dataset()
     print(f"Dataset artificially expanded by {n} examples.")
-    shuffle(self.images)
-    shuffle(self.masks)
 
   def collect_glob(self, dirs: list[str], is_mask: bool = False) -> chain[str]:
     return chain.from_iterable(glob.glob(f"data/{x}/*){'_*' if is_mask else ''}.png") for x in dirs)
@@ -140,7 +137,6 @@ class Dataset:
     n = TOTAL_EXAMPLES - len(self.images)
     self.images, self.masks = zip(*(self.deform(self.images[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy(), self.masks[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy()) for i in range(n)))
     return n
-
 
 if __name__ == "__main__":
   dataset = Dataset()

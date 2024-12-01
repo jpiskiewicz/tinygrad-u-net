@@ -45,9 +45,10 @@ if __name__ == "__main__":
   save_test_prediction = get_test_predictor(net, dataset)
 
   @TinyJit
-  def perform_train_step(step: int):
+  def perform_train_step():
     Tensor.training = True
-    batch, truth = dataset.images[step], dataset.masks[step]
+    samp = Tensor.randint(1)
+    batch, truth = dataset.images[samp], dataset.masks[samp]
     out = net(batch)
     truth = crop(truth, out.shape[2])
     loss = out.softmax().cross_entropy(truth)
@@ -57,7 +58,7 @@ if __name__ == "__main__":
     return loss
 
   for step in range(100000):
-    loss = perform_train_step(step)
+    loss = perform_train_step()
     if step % 100 == 0:
       save_test_prediction(step, loss)
     if step % 1000 == 0:
