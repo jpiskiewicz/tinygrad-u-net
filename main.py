@@ -4,10 +4,11 @@ from PIL import Image
 from tinygrad import TinyJit
 from tinygrad.tensor import Tensor
 from tinygrad.nn.optim import SGD
-from dataset import Dataset, ImageWithGroundTruth
+from dataset import Dataset, save_image
 from net import UNet
 from error import pixel_error
 from util import crop
+from typing import Callable
 
 
 """
@@ -24,12 +25,12 @@ Fueled by truckloads of Yerbata, way too many Serbian movies and ADHD meds.
 # DONE: Understand what kind of deformations are done to the data in the whitepaper.
 
 
-def get_test_predictor(net: UNet, batch: ImageWithGroundTruth):
-  # TODO)) Fix high memory usage in this function.
-  image, truth = batch
-  Image.fromarray(image.numpy()[0][0]).save("out/batch.png")
-  Image.fromarray(truth.numpy()[0][0].astype(bool)).save("out/truth.png")
+def get_test_predictor(net: UNet, dataset: Dataset) -> Callable[[int, Tensor], None]:
+  image, truth = dataset.images[0], dataset.masks[0]
+  save_image(image, "out/batch.png")
+  save_image(truth, "out/truth.png", mask = True)
   def f(step: int, loss: Tensor):
+    Tensor.training = False
     out = net(image)
     print("step:", step, "loss:", loss.numpy(), "pixel error:", pixel_error(out, crop(truth, out.shape[2])))
     Image.fromarray(out.numpy()[0][0] > 0).save(f"out/out_{step}.png")
@@ -41,11 +42,12 @@ if __name__ == "__main__":
   optimizer = SGD(net.weights, 0.01, 0.99)
   dataset = Dataset()
 
-  save_test_prediction = get_test_predictor(net, dataset.choose())
+  save_test_prediction = get_test_predictor(net, dataset)
 
   @TinyJit
-  def perform_train_step():
-    batch, truth = dataset.choose()
+  def perform_train_step(step: int):
+    Tensor.training = True
+    batch, truth = dataset.images[step], dataset.masks[step]
     out = net(batch)
     truth = crop(truth, out.shape[2])
     loss = out.softmax().cross_entropy(truth)
@@ -55,10 +57,8 @@ if __name__ == "__main__":
     return loss
 
   for step in range(100000):
-    Tensor.training = True
-    loss = perform_train_step()
+    loss = perform_train_step(step)
     if step % 100 == 0:
-      Tensor.training = False
       save_test_prediction(step, loss)
     if step % 1000 == 0:
       net.save_state()

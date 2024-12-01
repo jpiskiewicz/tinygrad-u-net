@@ -1,48 +1,90 @@
 #!/usr/bin/env python3
 
 import numpy
-import sys
 import cv2
-import os
-import re
 import glob
+import re
+from itertools import chain
+from functools import reduce
 from tinygrad.tensor import Tensor
 from PIL import Image
 from multiprocessing import Pool
-from tqdm import tqdm
-from typing import Union
-from random import shuffle
+from typing import cast
 
 
-type ImageWithGroundTruth = tuple[Tensor, Tensor]
+def save_image(image: Tensor, filename: str, mask: bool = False):
+  n = image.numpy()[0][0]
+  Image.fromarray(n.astype(bool) if mask else n).save(filename)
 
+IMAGE_SIZE = 572
+TOTAL_EXAMPLES = 1000 # Examples read from the files + artifically generated smooth deformed images
+
+type ReadImageIn = list[tuple[str, bool]]
 
 class Dataset:
   def __init__(self):
+    """
+    Dataset build process:
+      1. Read masks and images into tensors;
+      2. Combine multiple masks for into one object ID channel;
+      3. Zip the image and mask tensors together;
+      4. Perform smooth image deformations on each tensor;
+      5. Combine all deformed tensors.
+    """
     dirs = ["benign", "malignant", "normal"]
-    files = []
-    for dir in dirs:
-      current_dir = os.path.join("data", dir)
-      batch = [os.path.join(current_dir, x) for x in os.listdir(current_dir)]
-      files = [*files, *filter(lambda x: re.search("_mask*", x) is None, batch)]
-    data = self.preprocess(files)
-    shuffle(data)
-    train_size = int(len(data) * 0.6)
-    self.train, self.val = data[:train_size], data[train_size:]
+    image_filenames, mask_filenames = self.get_filenames(dirs)
+    self.images, self.masks = [x[1] for x in self.to_tensors(self.read_files(image_filenames))], self.to_tensors(self.read_files(mask_filenames))
+    self.masks = self.combine_masks(self.masks)
+    assert len(self.images) == len(self.masks), f"len(images) = {len(self.images)}, len(masks) = {len(self.masks)}"
+    print(f"Read {len(self.images)} images.")
+    n = self.expand_dataset()
+    print(f"Dataset artificially expanded by {n} examples.")
 
-  def convert_and_crop(self, image: Image.Image, mode: str = "L", feature_id: Union[int, None] = None) -> numpy.ndarray:
-    image = image.convert(mode)
+  def collect_glob(self, dirs: list[str], is_mask: bool = False) -> chain[str]:
+    return chain.from_iterable(glob.glob(f"data/{x}/*){'_*' if is_mask else ''}.png") for x in dirs)
+
+  def get_filenames(self, dirs: list[str]) -> tuple[ReadImageIn, ReadImageIn]:
+    return [(x, False) for x in sorted(self.collect_glob(dirs))], [(x, True) for x in sorted(self.collect_glob(dirs, True))]
+
+  def read_image(self, file: tuple[str, bool]) -> tuple[str, numpy.ndarray]:
+    filename, mode = file[0], "1" if file[1] else "L"
+    image = Image.open(filename).convert(mode)
     center = [x/2 for x in image.size]
-    cropped = numpy.array(image.crop((center[0] - 286, center[1] - 286, center[0] + 286, center[1] + 286))).astype(numpy.uint8)
-    if mode == "1":
-      assert feature_id is not None
-      cropped[cropped > 0] += feature_id
-    return cropped
+    cropped = numpy.array(image.crop((center[0] - IMAGE_SIZE / 2, center[1] - IMAGE_SIZE / 2, center[0] + IMAGE_SIZE / 2, center[1] + IMAGE_SIZE / 2))).astype(numpy.uint8)
+    return filename, cropped
+
+  def read_files(self, filenames) -> list[tuple[str, numpy.ndarray]]:
+    with Pool(8) as p:
+      return p.map(self.read_image, filenames)
+
+  def to_tensors(self, images: list[tuple[str, numpy.ndarray]]) -> list[tuple[str, Tensor]]: return [(n, Tensor(x).reshape(1, 1, IMAGE_SIZE, IMAGE_SIZE)) for n, x in images]
+
+  def group_masks(self, masks: list[tuple[str, Tensor]]) -> list[list[Tensor]]:
+    """
+    Groups masks that belong to the same image and combines them together
+    into a single object ID channel.
+    """
+    grouped_masks = []
+    last_id: int = -1
+    curr_mask = []
+    for k, v in masks:
+      curr_id = int(re.split(r"[()]", k)[1])
+      if curr_id != last_id and last_id != -1:
+        grouped_masks.append(curr_mask)
+        curr_mask = []
+      curr_mask.append(v)
+      last_id = curr_id
+    grouped_masks.append(curr_mask)
+    return grouped_masks
+
+  def combine_masks(self, masks: list[tuple[str, Tensor]]) -> list[Tensor]: return [reduce(lambda v, e: v + e, x) for x in self.group_masks(masks)]
 
   def deform(self, image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
     """
     This contains the logic for smooth image deformation (https://en.wikipedia.org/wiki/Homotopy)
     using random displacement vectors on a coarse 3x3 grid (see section 3.1 in the U-Net paper).
+
+    Rewrite this to be just one big operation on a multidimensional Tensor.
     """
     grid_size = 3
     sd = 10
@@ -81,39 +123,15 @@ class Dataset:
 
     return Tensor(image).reshape(1, 1, width, height), Tensor(mask).reshape(1, 1, width, height)
 
-  def get_mask(self, path: str) -> numpy.ndarray:
-    root, ext = os.path.splitext(path)
-    filenames = glob.glob(root + "_mask*")
-    read = lambda filename, i: self.convert_and_crop(Image.open(filename), "1", i)
-    mask = read(filenames[0], 0)
-    for i, filename in enumerate(filenames[1:]):
-      mask += read(filename, i + 1)
-    return mask
-
-  def split_mask(self, mask: Tensor) -> Tensor:
+  def expand_dataset(self) -> int:
     """
-    Split feature mask which contains object IDs into two channels:
-    binary channel and an integer-valued object ID channel.
+    Artifically expands the dataset by choosing examples at random and
+    performing smooth deformations on them.
     """
-    return mask.cat(mask.clamp(Tensor.full(mask.shape, 0), Tensor.full(mask.shape, 1)), dim=1)
+    n = TOTAL_EXAMPLES - len(self.images)
+    self.images, self.masks = zip(*(self.deform(self.images[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy(), self.masks[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy()) for i in range(n)))
+    return n
 
-  def preprocess_internal(self, path: str) -> ImageWithGroundTruth:
-    image = Image.open(path)
-    return self.deform(self.convert_and_crop(image), self.get_mask(path))
 
-  def preprocess(self, files: list[str]) -> list[ImageWithGroundTruth]:
-    progress = tqdm(total=len(files), desc="Loading dataset")
-    data = []
-    with Pool(8) as pool:
-      async_result = pool.map(self.preprocess_internal, files)
-      for res in async_result:
-        progress.update()
-        data.append(res)
-      progress.close()
-      return data
-
-  def choose(self) -> ImageWithGroundTruth:
-    i = numpy.random.randint(0, len(self.train))
-    batch, truth = self.train[i]
-    truth = self.split_mask(truth)
-    return batch, truth
+if __name__ == "__main__":
+  dataset = Dataset()
