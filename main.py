@@ -9,6 +9,7 @@ from net import UNet
 from error import pixel_error
 from util import crop
 from typing import Callable
+from functools import reduce
 
 
 """
@@ -41,6 +42,8 @@ if __name__ == "__main__":
   net = UNet()
   optimizer = SGD(net.weights, 0.01, 0.99)
   dataset = Dataset()
+  images = reduce(lambda v, e: v.cat(e, dim=0), dataset.images)
+  masks = reduce(lambda v, e: v.cat(e, dim=0), dataset.masks)
 
   save_test_prediction = get_test_predictor(net, dataset)
 
@@ -48,7 +51,7 @@ if __name__ == "__main__":
   def perform_train_step():
     Tensor.training = True
     samp = Tensor.randint(1)
-    batch, truth = dataset.images[samp[0].numpy()], dataset.masks[samp[0].numpy()]
+    batch, truth = images[samp], masks[samp]
     out = net(batch)
     truth = crop(truth, out.shape[2])
     loss = out.softmax().cross_entropy(truth)

@@ -127,7 +127,7 @@ class Dataset:
       borderMode=cv2.BORDER_REFLECT
     )
 
-    return Tensor(image).reshape(1, 1, width, height), self.split_mask(Tensor(mask).reshape(1, 1, width, height))
+    return Tensor(image).reshape(1, 1, width, height), Tensor(mask).reshape(1, 1, width, height)
 
   def expand_dataset(self) -> int:
     """
@@ -135,7 +135,10 @@ class Dataset:
     performing smooth deformations on them.
     """
     n = TOTAL_EXAMPLES - len(self.images)
-    self.images, self.masks = zip(*(self.deform(self.images[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy(), self.masks[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy()) for i in range(n)))
+    images, masks = zip(*(self.deform(self.images[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy(), self.masks[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy()) for i in range(n)))
+    self.images += images
+    self.masks += masks
+    self.masks = [self.split_mask(x) for x in self.masks]
     return n
 
 if __name__ == "__main__":
