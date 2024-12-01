@@ -48,7 +48,7 @@ if __name__ == "__main__":
   def perform_train_step():
     Tensor.training = True
     samp = Tensor.randint(1)
-    batch, truth = dataset.images[samp], dataset.masks[samp]
+    batch, truth = dataset.images[samp.numpy()], dataset.masks[samp.numpy()]
     out = net(batch)
     truth = crop(truth, out.shape[2])
     loss = out.softmax().cross_entropy(truth)
