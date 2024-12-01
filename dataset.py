@@ -79,6 +79,13 @@ class Dataset:
 
   def combine_masks(self, masks: list[tuple[str, Tensor]]) -> list[Tensor]: return [reduce(lambda v, e: v + e, x) for x in self.group_masks(masks)]
 
+  def split_mask(self, mask: Tensor) -> Tensor:
+      """
+      Split feature mask which contains object IDs into two channels:
+      binary channel and an integer-valued object ID channel.
+      """
+      return mask.cat(mask.clamp(Tensor.full(mask.shape, 0), Tensor.full(mask.shape, 1)), dim=1)
+
   def deform(self, image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
     """
     This contains the logic for smooth image deformation (https://en.wikipedia.org/wiki/Homotopy)
@@ -121,7 +128,7 @@ class Dataset:
       borderMode=cv2.BORDER_REFLECT
     )
 
-    return Tensor(image).reshape(1, 1, width, height), Tensor(mask).reshape(1, 1, width, height)
+    return Tensor(image).reshape(1, 1, width, height), self.split_mask(Tensor(mask).reshape(1, 1, width, height))
 
   def expand_dataset(self) -> int:
     """
