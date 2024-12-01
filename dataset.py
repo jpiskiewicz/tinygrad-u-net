@@ -39,7 +39,8 @@ class Dataset:
     print(f"Read {len(self.images)} images.")
     n = self.expand_dataset()
     print(f"Dataset artificially expanded by {n} examples.")
-    self.images, self.masks = shuffle(self.images), shuffle(self.masks)
+    shuffle(self.images)
+    shuffle(self.masks)
 
   def collect_glob(self, dirs: list[str], is_mask: bool = False) -> chain[str]:
     return chain.from_iterable(glob.glob(f"data/{x}/*){'_*' if is_mask else ''}.png") for x in dirs)
