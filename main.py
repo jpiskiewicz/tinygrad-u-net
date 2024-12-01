@@ -8,6 +8,7 @@ from dataset import Dataset, save_image
 from net import UNet
 from error import pixel_error
 from util import crop
+from typing import Callable
 
 
 """
@@ -24,9 +25,8 @@ Fueled by truckloads of Yerbata, way too many Serbian movies and ADHD meds.
 # DONE: Understand what kind of deformations are done to the data in the whitepaper.
 
 
-def get_test_predictor(net: UNet, batch: ImageWithGroundTruth):
-  # TODO)) Fix high memory usage in this function.
-  image, truth = batch
+def get_test_predictor(net: UNet, dataset: Dataset) -> Callable[[int, Tensor], None]:
+  image, truth = dataset.images[0], dataset.masks[0]
   save_image(image, "out/batch.png")
   save_image(truth, "out/truth.png", mask = True)
   def f(step: int, loss: Tensor):
@@ -42,12 +42,12 @@ if __name__ == "__main__":
   optimizer = SGD(net.weights, 0.01, 0.99)
   dataset = Dataset()
 
-  save_test_prediction = get_test_predictor(net, dataset.choose())
+  save_test_prediction = get_test_predictor(net, dataset)
 
   @TinyJit
-  def perform_train_step():
+  def perform_train_step(step: int):
     Tensor.training = True
-    batch, truth = dataset.choose()
+    batch, truth = dataset.images[step], dataset.masks[step]
     out = net(batch)
     truth = crop(truth, out.shape[2])
     loss = out.softmax().cross_entropy(truth)
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     return loss
 
   for step in range(100000):
-    loss = perform_train_step()
+    loss = perform_train_step(step)
     if step % 100 == 0:
       save_test_prediction(step, loss)
     if step % 1000 == 0:

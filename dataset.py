@@ -9,6 +9,7 @@ from functools import reduce
 from tinygrad.tensor import Tensor
 from PIL import Image
 from multiprocessing import Pool
+from typing import cast
 
 
 def save_image(image: Tensor, filename: str, mask: bool = False):
@@ -16,6 +17,7 @@ def save_image(image: Tensor, filename: str, mask: bool = False):
   Image.fromarray(n.astype(bool) if mask else n).save(filename)
 
 IMAGE_SIZE = 572
+TOTAL_EXAMPLES = 1000 # Examples read from the files + artifically generated smooth deformed images
 
 type ReadImageIn = list[tuple[str, bool]]
 
@@ -31,9 +33,12 @@ class Dataset:
     """
     dirs = ["benign", "malignant", "normal"]
     image_filenames, mask_filenames = self.get_filenames(dirs)
-    images, masks = [x[0] for x in self.to_tensors(self.read_files(image_filenames))], self.to_tensors(self.read_files(mask_filenames))
-    masks = self.combine_masks(masks)
-    assert len(images) == len(masks), f"len(images) = {len(images)}, len(masks) = {len(masks)}"
+    self.images, self.masks = [x[1] for x in self.to_tensors(self.read_files(image_filenames))], self.to_tensors(self.read_files(mask_filenames))
+    self.masks = self.combine_masks(self.masks)
+    assert len(self.images) == len(self.masks), f"len(images) = {len(self.images)}, len(masks) = {len(self.masks)}"
+    print(f"Read {len(self.images)} images.")
+    n = self.expand_dataset()
+    print(f"Dataset artificially expanded by {n} examples.")
 
   def collect_glob(self, dirs: list[str], is_mask: bool = False) -> chain[str]:
     return chain.from_iterable(glob.glob(f"data/{x}/*){'_*' if is_mask else ''}.png") for x in dirs)
@@ -52,7 +57,7 @@ class Dataset:
     with Pool(8) as p:
       return p.map(self.read_image, filenames)
 
-  def to_tensors(self, images: list[tuple[str, numpy.ndarray]]) -> list[Tensor]: return [(n, Tensor(x).reshape(1, 1, IMAGE_SIZE, IMAGE_SIZE)) for n, x in images]
+  def to_tensors(self, images: list[tuple[str, numpy.ndarray]]) -> list[tuple[str, Tensor]]: return [(n, Tensor(x).reshape(1, 1, IMAGE_SIZE, IMAGE_SIZE)) for n, x in images]
 
   def group_masks(self, masks: list[tuple[str, Tensor]]) -> list[list[Tensor]]:
     """
@@ -72,7 +77,7 @@ class Dataset:
     grouped_masks.append(curr_mask)
     return grouped_masks
 
-  def combine_masks(self, masks: list[tuple[str, Tensor]]) -> list[Tensor]: return [reduce(lambda v, e: v + e, x) for x in self.group_masks(masks)] # Fuuck not the Tensor | MathTrait bullshit again...
+  def combine_masks(self, masks: list[tuple[str, Tensor]]) -> list[Tensor]: return [reduce(lambda v, e: v + e, x) for x in self.group_masks(masks)]
 
   def deform(self, image: numpy.ndarray, mask: numpy.ndarray) -> tuple[Tensor, Tensor]:
     """
@@ -117,6 +122,15 @@ class Dataset:
     )
 
     return Tensor(image).reshape(1, 1, width, height), Tensor(mask).reshape(1, 1, width, height)
+
+  def expand_dataset(self) -> int:
+    """
+    Artifically expands the dataset by choosing examples at random and
+    performing smooth deformations on them.
+    """
+    n = TOTAL_EXAMPLES - len(self.images)
+    self.images, self.masks = zip(*(self.deform(self.images[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy(), self.masks[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy()) for i in range(n)))
+    return n
 
 
 if __name__ == "__main__":
