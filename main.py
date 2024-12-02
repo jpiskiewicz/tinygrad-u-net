@@ -41,9 +41,7 @@ def get_test_predictor(net: UNet, dataset: Dataset) -> Callable[[int, Tensor], N
 if __name__ == "__main__":
   net = UNet()
   optimizer = SGD(net.weights, 0.01, 0.99)
-  dataset = Dataset()
-  images = reduce(lambda v, e: v.cat(e, dim=0), dataset.images)
-  masks = reduce(lambda v, e: v.cat(e, dim=0), dataset.masks)
+  dataset = Dataset("dataset.safetensors")
 
   save_test_prediction = get_test_predictor(net, dataset)
 
@@ -51,7 +49,7 @@ if __name__ == "__main__":
   def perform_train_step():
     Tensor.training = True
     samp = Tensor.randint(1)
-    batch, truth = images[samp], masks[samp]
+    batch, truth = dataset.images[samp], dataset.masks[samp]
     out = net(batch)
     truth = crop(truth, out.shape[2])
     loss = out.softmax().cross_entropy(truth)

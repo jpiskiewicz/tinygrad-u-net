@@ -7,8 +7,10 @@ import re
 from itertools import chain
 from functools import reduce
 from tinygrad.tensor import Tensor
+from tinygrad.nn.state import safe_save, safe_load
 from PIL import Image
 from multiprocessing import Pool
+from typing import Union
 
 
 def save_image(image: Tensor, filename: str, mask: bool = False):
@@ -21,7 +23,7 @@ TOTAL_EXAMPLES = 1000 # Examples read from the files + artifically generated smo
 type ReadImageIn = list[tuple[str, bool]]
 
 class Dataset:
-  def __init__(self):
+  def __init__(self, safetensors: Union[str, None] = None):
     """
     Dataset build process:
       1. Read masks and images into tensors;
@@ -31,6 +33,10 @@ class Dataset:
       5. Combine all deformed tensors.
     """
     dirs = ["benign", "malignant", "normal"]
+    if safetensors is None: self.build_dataset(dirs)
+    else: self.load_safetensors(safetensors)
+
+  def build_dataset(self, dirs: list[str]):
     image_filenames, mask_filenames = self.get_filenames(dirs)
     self.images, self.masks = [x[1] for x in self.to_tensors(self.read_files(image_filenames))], self.to_tensors(self.read_files(mask_filenames))
     self.masks = self.combine_masks(self.masks)
@@ -38,6 +44,10 @@ class Dataset:
     print(f"Read {len(self.images)} images.")
     n = self.expand_dataset()
     print(f"Dataset artificially expanded by {n} examples.")
+
+  def load_safetensors(self, filename: str):
+    data = safe_load(filename)
+    self.images, self.masks = data["images"], data["masks"]
 
   def collect_glob(self, dirs: list[str], is_mask: bool = False) -> chain[str]:
     return chain.from_iterable(glob.glob(f"data/{x}/*){'_*' if is_mask else ''}.png") for x in dirs)
@@ -129,6 +139,15 @@ class Dataset:
 
     return Tensor(image).reshape(1, 1, width, height), Tensor(mask).reshape(1, 1, width, height)
 
+  def list_to_tensor(self, lst: list[Tensor]) -> Tensor:
+    tensor = lst[0]
+    for i, t in enumerate(lst[1:]):
+      print(i)
+      tensor = tensor.cat(t, dim=0)
+      if i != 0 and i % 24 == 0 or i == len(lst) - 2:
+        tensor.realize()
+    return tensor
+
   def expand_dataset(self) -> int:
     """
     Artifically expands the dataset by choosing examples at random and
@@ -139,7 +158,15 @@ class Dataset:
     self.images += images
     self.masks += masks
     self.masks = [self.split_mask(x) for x in self.masks]
+    self.images = self.list_to_tensor(self.images)
+    self.masks = self.list_to_tensor(self.masks)
     return n
+
+  def save(self, filename: str): safe_save({ "images": self.images, "masks": self.masks }, filename)
 
 if __name__ == "__main__":
   dataset = Dataset()
+  print("Saving the dataset.")
+  f = "dataset.safetensors"
+  dataset.save(f)
+  print(f"Dataset saved at {f}.")
