@@ -18,7 +18,7 @@ def save_image(image: Tensor, filename: str, mask: bool = False):
   Image.fromarray(n.astype(bool) if mask else n).save(filename)
 
 IMAGE_SIZE = 572
-TOTAL_EXAMPLES = 1000 # Examples read from the files + artifically generated smooth deformed images
+TOTAL_EXAMPLES = 800 # Examples read from the files + artifically generated smooth deformed images
 
 type ReadImageIn = list[tuple[str, bool]]
 
@@ -47,7 +47,7 @@ class Dataset:
 
   def load_safetensors(self, filename: str):
     data = safe_load(filename)
-    self.images, self.masks = data["images"], data["masks"]
+    self.images, self.masks = data["images"].to_device("CUDA"), data["masks"].to_device("CUDA")
 
   def collect_glob(self, dirs: list[str], is_mask: bool = False) -> chain[str]:
     return chain.from_iterable(glob.glob(f"data/{x}/*){'_*' if is_mask else ''}.png") for x in dirs)
@@ -144,9 +144,9 @@ class Dataset:
     for i, t in enumerate(lst[1:]):
       print(i)
       tensor = tensor.cat(t, dim=0)
-      if i != 0 and i % 24 == 0 or i == len(lst) - 2:
+      if i != 0 and i % 100 == 0:
         tensor.realize()
-    return tensor
+    return tensor.realize()
 
   def expand_dataset(self) -> int:
     """
