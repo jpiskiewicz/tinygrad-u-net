@@ -145,8 +145,8 @@ class Dataset:
     return Tensor(image).reshape(1, 1, width, height), Tensor(mask).reshape(1, 1, width, height)
 
   def list_to_tensor(self, lst: list[Tensor]) -> Tensor:
-    tensor = lst[0].reshape(1, *lst[0].shape)
-    for i in range(1, len(lst), 100): tensor = tensor.cat(*[x.reshape(1, *x.shape) for x in lst[i:i+100 if i+100 < len(lst) else len(lst)]]).realize()
+    tensor = lst[0]
+    for i in range(1, len(lst), 100): tensor = tensor.cat(*[x for x in lst[i:i+100 if i+100 < len(lst) else len(lst)]]).realize()
     return tensor
 
   def expand_dataset(self) -> int:
