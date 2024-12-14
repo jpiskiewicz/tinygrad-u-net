@@ -3,6 +3,7 @@
 from PIL import Image
 from tinygrad import TinyJit
 from tinygrad.tensor import Tensor
+from tinygrad.dtype import dtypes
 from tinygrad.nn.optim import SGD
 from dataset import Dataset, save_image
 from net import UNet
@@ -27,7 +28,7 @@ Fueled by truckloads of Yerbata, way too many Serbian movies and ADHD meds.
 
 
 def get_test_predictor(net: UNet, dataset: Dataset) -> Callable[[int, Tensor], None]:
-  image, truth = dataset.images[Tensor.zeros(1)], dataset.masks[Tensor.zeros(1)]
+  image, truth = dataset.images[Tensor.zeros(1, dtype=dtypes.int32)], dataset.masks[Tensor.zeros(1, dtype=dtypes.int32)]
   save_image(image, "out/batch.png")
   save_image(truth, "out/truth.png", mask = True)
   def f(step: int, loss: Tensor):
