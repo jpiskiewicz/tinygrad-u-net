@@ -27,7 +27,7 @@ Fueled by truckloads of Yerbata, way too many Serbian movies and ADHD meds.
 
 
 def get_test_predictor(net: UNet, dataset: Dataset) -> Callable[[int, Tensor], None]:
-  image, truth = dataset.images[0], dataset.masks[0]
+  image, truth = dataset.images[Tensor.zeros(1)], dataset.masks[Tensor.zeros(1)]
   save_image(image, "out/batch.png")
   save_image(truth, "out/truth.png", mask = True)
   def f(step: int, loss: Tensor):
