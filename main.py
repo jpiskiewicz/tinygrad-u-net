@@ -35,7 +35,7 @@ def get_test_predictor(net: UNet, dataset: Dataset) -> Callable[[int, Tensor], N
     Tensor.training = False
     out = net(image)
     print("step:", step, "loss:", loss.numpy(), "pixel error:", pixel_error(out, crop(truth, out.shape[2])))
-    Image.fromarray(out.numpy()[0][0] > 0).save(f"out/out_{step}.png")
+    Image.fromarray(out.sigmoid()[0][0].numpy() > 0.5).save(f"out/out_{step}.png")
   return f
 
 
