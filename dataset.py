@@ -42,8 +42,13 @@ class Dataset:
     self.masks = self.combine_masks(self.masks)
     assert len(self.images) == len(self.masks), f"len(images) = {len(self.images)}, len(masks) = {len(self.masks)}"
     print(f"Read {len(self.images)} images.")
-    n = self.expand_dataset()
-    print(f"Dataset artificially expanded by {n} examples.")
+    if TOTAL_EXAMPLES > len(self.images):
+      n = self.expand_dataset()
+      print(f"Dataset artificially expanded by {n} examples.")
+    elif TOTAL_EXAMPLES < len(self.images): self.images, self.masks = self.images[:TOTAL_EXAMPLES], self.masks[:TOTAL_EXAMPLES]
+    self.masks = [self.split_mask(x) for x in self.masks]
+    self.images = self.list_to_tensor(self.images)
+    self.masks = self.list_to_tensor(self.masks)
 
   def load_safetensors(self, filename: str):
     data = safe_load(filename)
@@ -140,13 +145,9 @@ class Dataset:
     return Tensor(image).reshape(1, 1, width, height), Tensor(mask).reshape(1, 1, width, height)
 
   def list_to_tensor(self, lst: list[Tensor]) -> Tensor:
-    tensor = lst[0]
-    for i, t in enumerate(lst[1:]):
-      print(i)
-      tensor = tensor.cat(t, dim=0)
-      if i != 0 and i % 100 == 0:
-        tensor.realize()
-    return tensor.realize()
+    tensor = lst[0].reshape(1, *lst[0].shape)
+    for i in range(1, len(lst), 100): tensor = tensor.cat(*[x.reshape(1, *x.shape) for x in lst[i:i+100 if i+100 < len(lst) else len(lst)]]).realize()
+    return tensor
 
   def expand_dataset(self) -> int:
     """
@@ -157,9 +158,6 @@ class Dataset:
     images, masks = zip(*(self.deform(self.images[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy(), self.masks[i].reshape(IMAGE_SIZE, IMAGE_SIZE).numpy()) for i in range(n)))
     self.images += images
     self.masks += masks
-    self.masks = [self.split_mask(x) for x in self.masks]
-    self.images = self.list_to_tensor(self.images)
-    self.masks = self.list_to_tensor(self.masks)
     return n
 
   def save(self, filename: str): safe_save({ "images": self.images, "masks": self.masks }, filename)
