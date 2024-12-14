@@ -5,7 +5,7 @@ from tinygrad import TinyJit
 from tinygrad.tensor import Tensor
 from tinygrad.dtype import dtypes
 from tinygrad.nn.optim import SGD
-from dataset import Dataset, save_image
+from dataset import Dataset, save_image, TOTAL_EXAMPLES
 from net import UNet
 from error import pixel_error
 from util import crop
@@ -49,7 +49,7 @@ if __name__ == "__main__":
   @TinyJit
   def perform_train_step():
     Tensor.training = True
-    samp = Tensor.randint(1)
+    samp = Tensor.randint(1, high=TOTAL_EXAMPLES)
     batch, truth = dataset.images[samp], dataset.masks[samp]
     out = net(batch)
     truth = crop(truth, out.shape[2])
