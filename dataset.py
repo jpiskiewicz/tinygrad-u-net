@@ -13,6 +13,13 @@ from multiprocessing import Pool
 from typing import Union
 
 
+def read_image(file: tuple[str, bool]) -> tuple[str, numpy.ndarray]:
+  filename, mode = file[0], "1" if file[1] else "L"
+  image = Image.open(filename).convert(mode)
+  center = [x/2 for x in image.size]
+  cropped = numpy.array(image.crop((center[0] - IMAGE_SIZE / 2, center[1] - IMAGE_SIZE / 2, center[0] + IMAGE_SIZE / 2, center[1] + IMAGE_SIZE / 2))).astype(numpy.uint8)
+  return filename, Tensor(cropped).reshape(1, 1, IMAGE_SIZE, IMAGE_SIZE)
+
 def save_image(image: Tensor, filename: str, mask: bool = False):
   n = image.numpy()[0][0]
   Image.fromarray(n.astype(bool) if mask else n).save(filename)
@@ -38,7 +45,7 @@ class Dataset:
 
   def build_dataset(self, dirs: list[str]):
     image_filenames, mask_filenames = self.get_filenames(dirs)
-    self.images, self.masks = [x[1] for x in self.to_tensors(self.read_files(image_filenames))], self.to_tensors(self.read_files(mask_filenames))
+    self.images, self.masks = [x[1] for x in self.read_files(image_filenames)], self.read_files(mask_filenames)
     self.masks = self.combine_masks(self.masks)
     assert len(self.images) == len(self.masks), f"len(images) = {len(self.images)}, len(masks) = {len(self.masks)}"
     print(f"Read {len(self.images)} images.")
@@ -60,18 +67,9 @@ class Dataset:
   def get_filenames(self, dirs: list[str]) -> tuple[ReadImageIn, ReadImageIn]:
     return [(x, False) for x in sorted(self.collect_glob(dirs))], [(x, True) for x in sorted(self.collect_glob(dirs, True))]
 
-  def read_image(self, file: tuple[str, bool]) -> tuple[str, numpy.ndarray]:
-    filename, mode = file[0], "1" if file[1] else "L"
-    image = Image.open(filename).convert(mode)
-    center = [x/2 for x in image.size]
-    cropped = numpy.array(image.crop((center[0] - IMAGE_SIZE / 2, center[1] - IMAGE_SIZE / 2, center[0] + IMAGE_SIZE / 2, center[1] + IMAGE_SIZE / 2))).astype(numpy.uint8)
-    return filename, cropped
-
   def read_files(self, filenames) -> list[tuple[str, numpy.ndarray]]:
     with Pool(8) as p:
-      return p.map(self.read_image, filenames)
-
-  def to_tensors(self, images: list[tuple[str, numpy.ndarray]]) -> list[tuple[str, Tensor]]: return [(n, Tensor(x).reshape(1, 1, IMAGE_SIZE, IMAGE_SIZE)) for n, x in images]
+      return p.map(read_image, filenames)
 
   def group_masks(self, masks: list[tuple[str, Tensor]]) -> list[list[Tensor]]:
     """

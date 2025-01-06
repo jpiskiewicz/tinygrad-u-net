@@ -10,7 +10,6 @@ from net import UNet
 from error import pixel_error
 from util import crop
 from typing import Callable
-from functools import reduce
 
 
 """
@@ -43,7 +42,6 @@ if __name__ == "__main__":
   net = UNet()
   optimizer = SGD(net.weights, 0.01, 0.99)
   dataset = Dataset("dataset.safetensors")
-
   save_test_prediction = get_test_predictor(net, dataset)
 
   @TinyJit
