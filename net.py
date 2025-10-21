@@ -1,7 +1,6 @@
 from tinygrad.nn import Conv2d, BatchNorm, ConvTranspose2d
 from tinygrad.nn.state import safe_save, get_state_dict
 from tinygrad.tensor import Tensor
-from util import crop
 
 
 class DoubleConv:
@@ -24,9 +23,6 @@ class DoubleConv:
     x = self.bn(x)
     return x.relu()
 
-  def weights(self) -> list[Tensor]:
-    return [self.conv1.weight, self.conv2.weight]
-
 
 class EncoderLayer:
   def __init__(self, in_chan, out_chan):
@@ -35,14 +31,22 @@ class EncoderLayer:
   def __call__(self, x: Tensor) -> Tensor:
     return self.conv(x.max_pool2d(stride = 2))
 
-  def weights(self) -> list[Tensor]:
-    return self.conv.weights()
-
 
 class DecoderLayer:
   def __init__(self, in_chan, out_chan):
     self.transpose_conv = ConvTranspose2d(in_chan, out_chan, 2, stride = 2)
     self.conv = DoubleConv(in_chan, out_chan) # in_chan because we do concat with contracting layer
+    
+  def crop(self, t: Tensor, size: Tensor) -> Tensor:
+    """
+    Crops tensor to achieve the same size as another tensor.
+    Used for stuff like contcatenating tenors or error
+    calculations.
+    """
+    start = (t.shape[2] - size) // 2
+    end = t.shape[2] - start
+    crop = (start, end)
+    return t.shrink((None, None, crop, crop))
 
   def __call__(self, x: Tensor, c: Tensor) -> Tensor:
     """
@@ -51,12 +55,10 @@ class DecoderLayer:
     from expanding path.
     """
     x = self.transpose_conv(x)
-    c = crop(c, x.shape[2])
+    c = self.crop(c, x.shape[2])
     x = x.cat(c, dim = 1)
     return self.conv(x)
-
-  def weights(self) -> list[Tensor]:
-   return [self.transpose_conv.weight, *self.conv.weights()]
+    
 
 class UNet():
   def __init__(self):
@@ -85,10 +87,3 @@ class UNet():
 
   def save_state(self):
     safe_save(get_state_dict(self), "checkpoint.safetensor")
-
-  @property
-  def weights(self) -> list[Tensor]:
-   return self.initial.weights()
-   + self.e1.weights() + self.e2.weights() + self.e3.weights() + self.e4.weights()
-   + self.d1.weights() + self.d2.weights() + self.d3.weights() + self.d4.weights()
-   + self.final.weights()
