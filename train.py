@@ -80,8 +80,8 @@ def run_training(train: Tensor, val: Tensor):
   for i in range(EPOCHS):
     epoch_msg = f"\nEpoch {i+1}/{EPOCHS}"
     print(epoch_msg)
-    train_loss = train_epoch(model, train, val)
-    print(f"Train Loss: {train_loss:.4f}")
+    train_loss, train_dice = train_epoch(model, train, optim)
+    print(f"Train Loss: {train_loss:.4f}; Train DICE: {train_dice:.4f}")
     val_dice = validate(model, val)
     print(", ".join([epoch_msg, f"Epoch Validation Dice: {val_dice:.4f}"]))
 

@@ -10,10 +10,10 @@ class DoubleConv:
   Each conv block is made out of one 3x3 kernel convolution operation, batch norm and a ReLu.
   """
 
-  def __init__(self, in_chan: int, out_chan: int):
-    self.conv1 = Conv2d(in_chan, out_chan, 3, bias=False)
+  def __init__(self, in_chan: int, out_chan: int, upsample: bool = False):
+    self.conv1 = Conv2d(in_chan, out_chan, 3, stride=1 if upsample else 2, padding=1, bias=False)
     self.bn = BatchNorm(out_chan)
-    self.conv2 = Conv2d(out_chan, out_chan, 3, bias=False)
+    self.conv2 = Conv2d(out_chan, out_chan, 3, padding=1, bias=False)
 
   def __call__(self, x: Tensor) -> Tensor:
     x = self.conv1(x)
@@ -24,49 +24,24 @@ class DoubleConv:
     return x.relu()
 
 
-class EncoderLayer:
-  def __init__(self, in_chan, out_chan):
-    self.conv = DoubleConv(in_chan, out_chan)
-
-  def __call__(self, x: Tensor) -> Tensor:
-    return self.conv(x.max_pool2d(stride = 2))
-
-
 class DecoderLayer:
   def __init__(self, in_chan, out_chan):
-    self.transpose_conv = ConvTranspose2d(in_chan, out_chan, 2, stride = 2)
-    self.conv = DoubleConv(in_chan, out_chan) # in_chan because we do concat with contracting layer
-    
-  def crop(self, t: Tensor, size: Tensor) -> Tensor:
-    """
-    Crops tensor to achieve the same size as another tensor.
-    Used for stuff like contcatenating tenors or error
-    calculations.
-    """
-    start = (t.shape[2] - size) // 2
-    end = t.shape[2] - start
-    crop = (start, end)
-    return t.shrink((None, None, crop, crop))
+    self.transpose_conv = ConvTranspose2d(in_chan, out_chan, 2, stride=2)
+    self.conv = DoubleConv(in_chan, out_chan, True) # in_chan because we do concat with contracting layer
 
   def __call__(self, x: Tensor, c: Tensor) -> Tensor:
-    """
-    c is the output from one of the layers of the contracting path.
-    We need to crop it before we concatenate it with the current level
-    from expanding path.
-    """
     x = self.transpose_conv(x)
-    c = self.crop(c, x.shape[2])
     x = x.cat(c, dim = 1)
     return self.conv(x)
     
 
 class UNet():
   def __init__(self):
-    self.initial = DoubleConv(1, 64)
-    self.e1 = EncoderLayer(64, 128)
-    self.e2 = EncoderLayer(128, 256)
-    self.e3 = EncoderLayer(256, 512)
-    self.e4 = EncoderLayer(512, 1024)
+    self.initial = DoubleConv(1, 64, True)
+    self.e1 = DoubleConv(64, 128)
+    self.e2 = DoubleConv(128, 256)
+    self.e3 = DoubleConv(256, 512)
+    self.e4 = DoubleConv(512, 1024)
     self.d1 = DecoderLayer(1024, 512)
     self.d2 = DecoderLayer(512, 256)
     self.d3 = DecoderLayer(256, 128)
