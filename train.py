@@ -34,7 +34,6 @@ def validate(model: UNet, dataset: Dataset) -> float:
       pred = model(image)
       return dice_coefficient(pred, dataset.labels[idx])
       
-      
     with Tensor.train(False):
       for idx in tqdm(range(l), desc="Validating"): total_dice += f(idx).numpy()
       
@@ -42,21 +41,19 @@ def validate(model: UNet, dataset: Dataset) -> float:
 
 
 @TinyJit
-def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: Adam) -> tuple[Tensor, Tensor]:
+def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: Adam) -> Tensor:
     pred = model(dataset.images[idx])
     label = dataset.labels[idx]
     loss = pred.binary_crossentropy(label)
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    dice = dice_coefficient(pred, label)
-    return loss, dice
+    return loss
 
 
-def train_epoch(model: UNet, dataset: Dataset, optimizer: Adam) -> tuple[float, float]:
+def train_epoch(model: UNet, dataset: Dataset, optimizer: Adam) -> float:
     """Train for one epoch"""
     total_loss = 0.0
-    total_dice = 0.0
     l = len(dataset.images)
     
     indices = list(range(l))
@@ -64,14 +61,10 @@ def train_epoch(model: UNet, dataset: Dataset, optimizer: Adam) -> tuple[float, 
     
     with Tensor.train(True):
       for idx in tqdm(indices, desc="Training"):
-        loss, dice = tiny_step(idx, dataset, model, optimizer)
+        loss = tiny_step(idx, dataset, model, optimizer)
         total_loss += loss.numpy()
-        total_dice += dice.numpy()
     
-    avg_loss = total_loss / l
-    avg_dice = total_dice / l
-    
-    return avg_loss, avg_dice
+    return total_loss / l
     
 
 def run_training(train: Tensor, val: Tensor):
@@ -80,10 +73,13 @@ def run_training(train: Tensor, val: Tensor):
   for i in range(EPOCHS):
     epoch_msg = f"\nEpoch {i+1}/{EPOCHS}"
     print(epoch_msg)
-    train_loss, train_dice = train_epoch(model, train, optim)
-    print(f"Train Loss: {train_loss:.4f}; Train DICE: {train_dice:.4f}")
+    # TODO: Loss function returns nan. Something is bad with the prediction or the mask probably
+    train_loss = train_epoch(model, train, optim)
+    print(f"Train Loss: {train_loss:.4f}")
     val_dice = validate(model, val)
-    print(", ".join([epoch_msg, f"Epoch Validation Dice: {val_dice:.4f}"]))
+    val_msg = ", ".join([epoch_msg, f"Epoch Validation Dice: {val_dice:.4f}"])
+    print(val_msg)
+    with open("eval_scores.txt", "a") as f: f.write(val_msg)
 
 
 if __name__ == "__main__":
