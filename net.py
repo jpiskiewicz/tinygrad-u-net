@@ -12,15 +12,16 @@ class DoubleConv:
 
   def __init__(self, in_chan: int, out_chan: int, upsample: bool = False):
     self.conv1 = Conv2d(in_chan, out_chan, 3, stride=1 if upsample else 2, padding=1, bias=False)
-    self.bn = BatchNorm(out_chan)
+    self.bn1 = BatchNorm(out_chan)
     self.conv2 = Conv2d(out_chan, out_chan, 3, padding=1, bias=False)
+    self.bn2 = BatchNorm(out_chan)
 
   def __call__(self, x: Tensor) -> Tensor:
     x = self.conv1(x)
-    x = self.bn(x)
+    x = self.bn1(x)
     x = x.relu()
     x = self.conv2(x)
-    x = self.bn(x)
+    x = self.bn2(x)
     return x.relu()
 
 
@@ -46,7 +47,7 @@ class UNet():
     self.d2 = DecoderLayer(512, 256)
     self.d3 = DecoderLayer(256, 128)
     self.d4 = DecoderLayer(128, 64)
-    self.final = Conv2d(64, 2, 1)
+    self.final = Conv2d(64, 1, 1)
 
   def __call__(self, x) -> Tensor:
     x1 = self.initial(x)

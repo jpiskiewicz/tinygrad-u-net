@@ -6,6 +6,7 @@ from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.optim import Adam
 from tinygrad.nn.state import get_parameters
 from tinygrad.helpers import tqdm
+from tinygrad.nn.state import safe_save, get_state_dict
 from dataset import choose_files, Dataset
 from random import shuffle
 
@@ -42,10 +43,10 @@ def validate(model: UNet, dataset: Dataset) -> float:
 
 @TinyJit
 def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: Adam) -> Tensor:
+    optimizer.zero_grad()
     pred = model(dataset.images[idx])
     label = dataset.labels[idx]
-    loss = pred.binary_crossentropy(label)
-    optimizer.zero_grad()
+    loss = pred.binary_crossentropy_logits(label)
     loss.backward()
     optimizer.step()
     return loss
@@ -80,6 +81,7 @@ def run_training(train: Tensor, val: Tensor):
     val_msg = ", ".join([epoch_msg, f"Epoch Validation Dice: {val_dice:.4f}"])
     print(val_msg)
     with open("eval_scores.txt", "a") as f: f.write(val_msg)
+  safe_save(get_state_dict(model), f"model{EPOCHS}.safetensors")
 
 
 if __name__ == "__main__":

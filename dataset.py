@@ -40,7 +40,9 @@ class Dataset:
     s = Tensor(nib.load(path).get_fdata(dtype=np.float16)[SLICE]).flip(1).transpose().clamp(0, 1 if mask else None)
     not_even = [s.shape[i] % 2 for i in range(2)]
     [y_pad, x_pad] = [(INPUT_SIZE - s.shape[i]) // 2 for i in range(2)]
-    s = s.pad((x_pad, x_pad + (1 if not_even[1] else 0), y_pad, y_pad + (1 if not_even[0] else 0))).expand(1, 1, -1, -1).cast(dtypes.float32)
+    s = s.pad((x_pad, x_pad + (1 if not_even[1] else 0), y_pad, y_pad + (1 if not_even[0] else 0))).expand(1, 1, -1, -1)
+    if mask: return s
+    s = s.cast(dtypes.float32)
     return ((s - s.mean()) / (s.std() + 1e-8)).cast(dtypes.float16) # z-score normalization
   
   def combine(self, slices: list[Tensor]) -> Tensor: return slices[0].stack(*slices[1:])
@@ -50,6 +52,6 @@ if __name__ == "__main__":
    train, val = choose_files("dataset/MICCAI_BraTS_2019_Data_Training/*GG/*")
    dataset = Dataset(val)
    for i in range(len(dataset.labels)):
-     x = dataset.images[i][0][0]
+     x = dataset.labels[i][0][0]
      print(x.min().numpy(), x.std().numpy(), x.max().numpy())
      plot_slice(x)
