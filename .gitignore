@@ -1,9 +1,11 @@
 .DS_Store
 __pycache__
 out
-*.safetensor
+*.safetensors
 papers
 data
 dataset
 .env
 validation_files.json
+training_files.json
+predictions
