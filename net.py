@@ -1,5 +1,7 @@
+#!/usr/bin/env python3
+
 from tinygrad.nn import Conv2d, BatchNorm, ConvTranspose2d
-from tinygrad.nn.state import safe_save, get_state_dict
+from tinygrad.nn.state import safe_save, get_state_dict, get_parameters
 from tinygrad.tensor import Tensor
 
 
@@ -63,3 +65,6 @@ class UNet():
 
   def save_state(self):
     safe_save(get_state_dict(self), "checkpoint.safetensor")
+
+if __name__ == "__main__":
+    for x in get_parameters(UNet()): print(x)

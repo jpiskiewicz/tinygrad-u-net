@@ -25,8 +25,8 @@ def choose_files(pattern):
   idx = int(len(directories) * 0.7)
   train = directories[:idx]
   val = directories[idx:]
-  with open("validation_files.json", "w") as f: json.dump(val, f)
-  with open("training_files.json", "w") as f: json.dump(train, f)
+  with open("validation_files.json", "w") as f: json.dump(val, f, indent=2)
+  with open("training_files.json", "w") as f: json.dump(train, f, indent=2)
   return train, val
 
 
