@@ -7,13 +7,15 @@ from tinygrad.nn.optim import Adam
 from tinygrad.nn.state import get_parameters
 from tinygrad.helpers import tqdm
 from tinygrad.nn.state import safe_save, get_state_dict
-from dataset import choose_files, Dataset
+from dataset import choose_files, Dataset, load_slice
 from random import shuffle
 from inference import infer_and_overlap
+from pathlib import Path
+from os import path
+import json
 
 
 DATASET = "dataset/MICCAI_BraTS_2019_Data_Training/*GG/*"
-TEST_IMAGE = "dataset/MICCAI_BraTS_2019_Data_Training/LGG/BraTS19_2013_0_1"
 EPOCHS = 500
 
 
@@ -63,15 +65,23 @@ def train_epoch(model: UNet, dataset: Dataset, optimizer: Adam) -> float:
     with Tensor.train(True):
       for idx in tqdm(indices, desc="Training"):
         loss = tiny_step(idx, dataset, model, optimizer)
-        # TODO: Maybe print the gradients here to check whether they are diminishing.
+        # TODO: Print the gradients here to check whether they are diminishing.
         total_loss += loss.numpy()
     
     return total_loss / l
+
+
+def choose_preview_image() -> str:
+    """Choose the image that contains the mask"""
+    with open("training_files.json") as f: examples = json.load(f)
+    for example in examples:
+        if (load_slice(path.join(example, Path(example).name + "_seg.nii"), True).max() > 0).numpy(): return example
     
 
 def run_training(train: Tensor, val: Tensor):
   model = UNet()
   optim = Adam(get_parameters(model), 1e-3)
+  preview_image = choose_preview_image()
   dice = 0
   largest_dice = 0
   for i in range(1, EPOCHS+1):
@@ -84,12 +94,15 @@ def run_training(train: Tensor, val: Tensor):
     print(val_msg)
     with open("eval_scores.txt", "a") as f: f.write(val_msg)
     if i % 10 == 0:
-        with Tensor.train(False): infer_and_overlap(model, TEST_IMAGE, "training_validation", i)
+        with Tensor.train(False): infer_and_overlap(model, preview_image, "training_validation", i)
+    if i % 50 == 0:
+        print("Saving the model...")
+        safe_save(get_state_dict(model), f"model_epoch_{i}.safetensors")
+        print("Saved.")
     if dice > largest_dice:
         print("This is the best DICE so far!!!")
         largest_dice = dice
-        with Tensor.train(False): infer_and_overlap(model, TEST_IMAGE, "best_dice", i)
-        safe_save(get_state_dict(model), f"model_dice_{dice}_percent.safetensors")
+        with Tensor.train(False): infer_and_overlap(model, preview_image, "best_dice", i)
 
 
 if __name__ == "__main__":

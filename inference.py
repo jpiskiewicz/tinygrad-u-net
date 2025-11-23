@@ -16,16 +16,16 @@ def make_8bit(im: Tensor) -> Tensor: return ((im - im.min()) / (im.max() - im.mi
 def mask_rgb(mask: Tensor, color: tuple[int, int, int]) -> Tensor: return (mask.unsqueeze(4).repeat_interleave(4, 4)[0][0] * Tensor(color + (255,))).cast(dtypes.uint8).numpy()
 
 def infer_and_overlap(net: UNet, dirname: str, subdir: str, epoch: int = 0):
-  im = load_slice(path.join(dirname, Path(dirname).name + "_t1ce.nii"), False)
-  print("Generating prediction...")
-  pred = net(im)
-  display_pred = Image.fromarray(mask_rgb(pred.sigmoid() > 0.5, (0, 0, 255)))
-  display_im = Image.fromarray(make_8bit(im)).convert("RGB")
-  original_mask = Image.fromarray(mask_rgb(load_slice(path.join(dirname, Path(dirname).name + "_seg.nii"), True), (255, 255, 0)))
-  out_path = Path(path.join("predictions", subdir, f"{path.basename(dirname)}_{epoch}.png"))
-  out_path.parent.mkdir(parents=True, exist_ok=True)
-  Image.blend(display_im, Image.alpha_composite(original_mask, display_pred).convert("RGB"), 0.5).save(out_path)
-  print("Saved prediction at", out_path)
+    im = load_slice(path.join(dirname, Path(dirname).name + "_t1ce.nii"), False)
+    print("Generating prediction...")
+    pred = net(im)
+    display_pred = Image.fromarray(mask_rgb(pred.sigmoid() > 0.5, (0, 0, 255)))
+    display_im = Image.fromarray(make_8bit(im)).convert("RGB")
+    original_mask = Image.fromarray(mask_rgb(load_slice(path.join(dirname, Path(dirname).name + "_seg.nii"), True), (255, 255, 0)))
+    out_path = Path(path.join("predictions", subdir, f"{path.basename(dirname)}_{epoch}.png"))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.blend(display_im, Image.alpha_composite(original_mask, display_pred).convert("RGB"), 0.5).save(out_path)
+    print("Saved prediction at", out_path)
   
 
 if __name__ == "__main__":
