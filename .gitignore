@@ -3,7 +3,6 @@ __pycache__
 out
 *.safetensors
 papers
-data
 dataset
 .env
 validation_files.json

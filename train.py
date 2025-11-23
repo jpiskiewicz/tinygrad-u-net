@@ -7,15 +7,12 @@ from tinygrad.nn.optim import Adam
 from tinygrad.nn.state import get_parameters
 from tinygrad.helpers import tqdm
 from tinygrad.nn.state import safe_save, get_state_dict
-from dataset import choose_files, Dataset, load_slice
+from dataset import REGEX, choose_files, Dataset, load_mask
 from random import shuffle
 from inference import infer_and_overlap
-from pathlib import Path
-from os import path
 import json
 
 
-DATASET = "dataset/MICCAI_BraTS_2019_Data_Training/*GG/*"
 EPOCHS = 500
 
 
@@ -42,13 +39,12 @@ def validate(model: UNet, dataset: Dataset) -> float:
 @TinyJit
 def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: Adam) -> Tensor:
     optimizer.zero_grad()
-    pred = model(dataset.images[idx]).sigmoid()
+    logits = model(dataset.images[idx])
     label = dataset.labels[idx]
-    # loss = pred.binary_crossentropy_logits(label)
-    smooth = 1e-5
-    y = (pred.sigmoid() > 0.5).float()
-    dice_loss = 1.0 - (2.0 * (pred * label).sum() + smooth) / (pred.sum() + label.sum() + smooth)
-    loss = 0.8 * dice_loss + 0.2 * pred.binary_crossentropy_logits(label)
+    smooth = 1e-6
+    probs = logits.sigmoid()
+    dice_loss = 1.0 - (2.0 * (probs * label).sum() + smooth) / (probs.sum() + label.sum() + smooth)
+    loss = 0.8 * dice_loss + 0.2 * logits.binary_crossentropy_logits(label)
     loss.backward()
     optimizer.step()
     return loss
@@ -71,17 +67,21 @@ def train_epoch(model: UNet, dataset: Dataset, optimizer: Adam) -> float:
     return total_loss / l
 
 
-def choose_preview_image() -> str:
+def choose_preview_image() -> str | None:
     """Choose the image that contains the mask"""
     with open("training_files.json") as f: examples = json.load(f)
     for example in examples:
-        if (load_slice(path.join(example, Path(example).name + "_seg.nii"), True).max() > 0).numpy(): return example
+        if (load_mask(example).max() > 0).numpy(): return example
+    return None
     
 
 def run_training(train: Tensor, val: Tensor):
   model = UNet()
   optim = Adam(get_parameters(model), 1e-3)
   preview_image = choose_preview_image()
+  if preview_image is None:
+    print("All masks are empty.")
+    return
   dice = 0
   largest_dice = 0
   for i in range(1, EPOCHS+1):
@@ -106,6 +106,6 @@ def run_training(train: Tensor, val: Tensor):
 
 
 if __name__ == "__main__":
-  train, val = [Dataset(x) for x in choose_files(DATASET)]
+  train, val = [Dataset(x) for x in choose_files(REGEX)]
   run_training(train, val)
   
