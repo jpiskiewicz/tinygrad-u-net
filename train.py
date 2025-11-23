@@ -4,12 +4,13 @@ from net import UNet
 from tinygrad.tensor import Tensor
 from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.optim import Adam
-from tinygrad.nn.state import get_parameters
+from tinygrad.nn.state import get_parameters, load_state_dict, safe_load
 from tinygrad.helpers import tqdm
 from tinygrad.nn.state import safe_save, get_state_dict
 from dataset import REGEX, choose_files, Dataset, load_mask
 from random import shuffle
 from inference import infer_and_overlap
+from sys import argv
 import json
 
 
@@ -77,6 +78,9 @@ def choose_preview_image() -> str | None:
 
 def run_training(train: Tensor, val: Tensor):
   model = UNet()
+  if len(argv) == 2:
+    state = safe_load(argv[1])  # Load model checkpoint
+    load_state_dict(model, state)
   optim = Adam(get_parameters(model), 1e-3)
   preview_image = choose_preview_image()
   if preview_image is None:
@@ -84,7 +88,7 @@ def run_training(train: Tensor, val: Tensor):
     return
   dice = 0
   largest_dice = 0
-  for i in range(1, EPOCHS+1):
+  for i in range(1 if len(argv) == 1 else int(argv[1].split("_")[2][:-12]), EPOCHS+1):
     epoch_msg = f"\nEpoch {i}/{EPOCHS}"
     print(epoch_msg)
     train_loss = train_epoch(model, train, optim)
