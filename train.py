@@ -25,11 +25,10 @@ def validate(model: UNet, dataset: Dataset) -> float:
     @TinyJit
     def f(idx: int) -> Tensor:
         pred = model(dataset.images[idx])
-        target = dataset.labels[idx]
-        smooth = 1e-5
-        y = (pred.sigmoid() > 0.5).float()
-        return (2.0 * (y * target).sum() + smooth) / (y.sum() + target.sum() + smooth)
-
+        probs = pred.sigmoid()
+        label = dataset.labels[idx]
+        smooth = 1e-6
+        return (2.0 * (probs * label).sum() + smooth) / (probs.sum() + label.sum() + smooth)
       
     with Tensor.train(False):
       for idx in tqdm(range(l), desc="Validating"): total_dice += f(idx).numpy()
