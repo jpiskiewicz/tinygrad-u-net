@@ -3,7 +3,7 @@
 from net import UNet
 from tinygrad.tensor import Tensor
 from tinygrad.engine.jit import TinyJit
-from tinygrad.nn.optim import Adam
+from tinygrad.nn.optim import AdamW
 from tinygrad.nn.state import get_parameters, load_state_dict, safe_load
 from tinygrad.helpers import tqdm
 from tinygrad.nn.state import safe_save, get_state_dict
@@ -38,20 +38,20 @@ def validate(model: UNet, dataset: Dataset) -> float:
 
 
 @TinyJit
-def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: Adam) -> Tensor:
+def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: AdamW) -> Tensor:
     optimizer.zero_grad()
     logits = model(dataset.images[idx])
     label = dataset.labels[idx]
     smooth = 1e-6
     probs = logits.sigmoid()
     dice_loss = 1.0 - (2.0 * (probs * label).sum() + smooth) / (probs.sum() + label.sum() + smooth)
-    loss = 0.8 * dice_loss + 0.2 * logits.binary_crossentropy_logits(label)
+    loss = 0.5 * dice_loss + 0.5 * logits.binary_crossentropy_logits(label)
     loss.backward()
     optimizer.step()
     return loss
 
 
-def train_epoch(model: UNet, dataset: Dataset, optimizer: Adam) -> float:
+def train_epoch(model: UNet, dataset: Dataset, optimizer: AdamW) -> float:
     """Train for one epoch"""
     total_loss = 0.0
     l = len(dataset.images)
@@ -81,7 +81,7 @@ def run_training(train: Tensor, val: Tensor):
   if len(argv) == 2:
     state = safe_load(argv[1])  # Load model checkpoint
     load_state_dict(model, state)
-  optim = Adam(get_parameters(model), 1e-3)
+  optim = AdamW(get_parameters(model), 1e-3, eps=1e-5)
   preview_image = choose_preview_image()
   if preview_image is None:
     print("All masks are empty.")
