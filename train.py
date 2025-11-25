@@ -43,8 +43,13 @@ def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: AdamW) -> Tenso
     label = dataset.labels[idx]
     smooth = 1e-6
     probs = logits.sigmoid()
-    dice_loss = 1.0 - (2.0 * (probs * label).sum() + smooth) / (probs.sum() + label.sum() + smooth)
-    loss = 0.5 * dice_loss + 0.5 * logits.binary_crossentropy_logits(label)
+    alpha = 0.3
+    beta = 0.7
+    tp = (probs * label).sum()
+    fp = ((1 - label) * probs).sum()
+    fn = (label * (1 - probs)).sum()
+    tversky_loss = 1.0 - (tp * smooth) / (tp + alpha * fp + beta * fn + smooth)
+    loss = 0.5 * tversky_loss + 0.5 * logits.binary_crossentropy_logits(label)
     loss.backward()
     optimizer.step()
     return loss
