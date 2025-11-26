@@ -42,9 +42,9 @@ def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: AdamW) -> Tenso
     logits = model(dataset.images[idx])
     label = dataset.labels[idx]
     smooth = 1e-6
-    gamma = 2.0
 
     # Focal loss
+    gamma = 2.0
     alpha = 0.25 # TODO: For alpha-balanced CE. Try to set this by inverse class frequency (like explained in the Focal loss paper).
     bce = logits.binary_crossentropy_logits(label, reduction="none")
     pt = (-bce).exp()
@@ -55,10 +55,11 @@ def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: AdamW) -> Tenso
     probs = logits.sigmoid()
     alpha_t = 0.3
     beta_t = 0.7
+    gamma_t = 4/3
     tp = (probs * label).sum()
     fp = ((1.0 - label) * probs).sum()
     fn = (label * (1.0 - probs)).sum()
-    focal_tversky_loss = (1.0 - (tp + smooth) / (tp + alpha_t * fp + beta_t * fn + smooth)).pow(gamma).mean()
+    focal_tversky_loss = (1.0 - (tp + smooth) / (tp + alpha_t * fp + beta_t * fn + smooth)).pow(gamma_t)
 
     loss = 0.4 * focal_loss + 0.6 * focal_tversky_loss
     loss.backward()
