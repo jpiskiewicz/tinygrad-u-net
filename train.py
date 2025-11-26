@@ -42,14 +42,25 @@ def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: AdamW) -> Tenso
     logits = model(dataset.images[idx])
     label = dataset.labels[idx]
     smooth = 1e-6
+    gamma = 2.0
+
+    # Focal loss
+    alpha = 0.25 # TODO: For alpha-balanced CE. Try to set this by inverse class frequency (like explained in the Focal loss paper).
+    bce = logits.binary_crossentropy_logits(label, reduction="none")
+    pt = (-bce).exp()
+    focal_weight = (label * alpha + (1.0 - label) * (1.0 - alpha)) * (1.0 - pt).pow(gamma)
+    focal_loss = (focal_weight * bce).mean()
+
+    # Tversky loss
     probs = logits.sigmoid()
-    alpha = 0.3
-    beta = 0.7
+    alpha_t = 0.3
+    beta_t = 0.7
     tp = (probs * label).sum()
-    fp = ((1 - label) * probs).sum()
-    fn = (label * (1 - probs)).sum()
-    tversky_loss = 1.0 - (tp * smooth) / (tp + alpha * fp + beta * fn + smooth)
-    loss = 0.5 * tversky_loss + 0.5 * logits.binary_crossentropy_logits(label)
+    fp = ((1.0 - label) * probs).sum()
+    fn = (label * (1.0 - probs)).sum()
+    focal_tversky_loss = (1.0 - (tp + smooth) / (tp + alpha_t * fp + beta_t * fn + smooth)).pow(gamma).mean()
+
+    loss = 0.4 * focal_loss + 0.6 * focal_tversky_loss
     loss.backward()
     optimizer.step()
     return loss
@@ -85,6 +96,7 @@ def run_training(train: Tensor, val: Tensor):
   if len(argv) == 2:
     state = safe_load(argv[1])  # Load model checkpoint
     load_state_dict(model, state)
+    print(f"Loaded model from {argv[1]}.")
   optim = AdamW(get_parameters(model), 1e-3, eps=1e-5)
   preview_image = choose_preview_image()
   if preview_image is None:
@@ -114,6 +126,8 @@ def run_training(train: Tensor, val: Tensor):
 
 
 if __name__ == "__main__":
+  print("Loading dataset...")
   train, val = [Dataset(x) for x in choose_files(REGEX)]
+  print("Dataset loaded.")
   run_training(train, val)
   

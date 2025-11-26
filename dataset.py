@@ -32,7 +32,6 @@ def load_image(p: str) -> Tensor:
   desired_size = [round(x) for x in (SIZE if im.shape[0] > im.shape[1] else im.shape[0] + (SIZE - im.shape[1]) * aspect, im.shape[1] + (SIZE - im.shape[0]) * aspect if im.shape[0] > im.shape[1] else SIZE)]
   padding = [(SIZE - x) // 2 for x in desired_size]
   im = im.interpolate(desired_size).pad((padding[1] + desired_size[1] % 2, padding[1], padding[0] + desired_size[0] % 2, padding[0]), mode = "reflect").expand(1, 1, -1, -1)
-  print(im.shape)
   return im
   
   
@@ -57,6 +56,5 @@ if __name__ == "__main__":
    train, val = choose_files(REGEX)
    dataset = Dataset(val)
    for i in range(len(dataset.labels)):
-     x = dataset.labels[i][0][0]
-     print(x.min().numpy(), x.std().numpy(), x.max().numpy())
-     plot_slice(x)
+     plot_slice(dataset.labels[i][0][0])
+     plot_slice(dataset.images[i][0][0])
