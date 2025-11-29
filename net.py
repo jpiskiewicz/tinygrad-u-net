@@ -8,6 +8,9 @@ from tinygrad.tensor import Tensor
 # TODO: Look into these initializers: https://github.com/tinygrad/tinygrad/blob/master/examples/mlperf/initializers.py
 
 
+POSITIVE_PIXEL_RATIO = 0.05
+
+
 class DoubleConv:
   """
   Each convolutional layer of the U-Net consists of two conv blocks
@@ -32,7 +35,7 @@ class DoubleConv:
 
 class DecoderLayer:
   def __init__(self, in_chan, out_chan):
-    self.transpose_conv = ConvTranspose2d(in_chan, out_chan, 2, stride=2)
+    self.transpose_conv = ConvTranspose2d(in_chan, out_chan, 2, stride=2, bias=False)
     self.conv = DoubleConv(in_chan, out_chan, True) # in_chan because we do concat with contracting layer
 
   def __call__(self, x: Tensor, c: Tensor) -> Tensor:
@@ -52,7 +55,8 @@ class UNet():
     self.d2 = DecoderLayer(512, 256)
     self.d3 = DecoderLayer(256, 128)
     self.d4 = DecoderLayer(128, 64)
-    self.final = Conv2d(64, 1, 1)
+    self.final = Conv2d(64, 1, 1, bias=False)
+    self.final.bias = Tensor.full_like(self.final.bias, Tensor(POSITIVE_PIXEL_RATIO / (1 - POSITIVE_PIXEL_RATIO + 1e-8)).log())
 
   def __call__(self, x) -> Tensor:
     x1 = self.initial(x)
