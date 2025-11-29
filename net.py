@@ -3,22 +3,15 @@
 from tinygrad.nn import Conv2d, BatchNorm, ConvTranspose2d
 from tinygrad.nn.state import safe_save, get_state_dict, get_parameters
 from tinygrad.tensor import Tensor
-import math
 
 
 POSITIVE_PIXEL_RATIO = 0.05
 
 
-def kaiming_normal(shape: Tensor):
-  # Since fan_out is not implemented in Tensor.kaiming_normal, we have to do it ourselves.
-  std = math.sqrt(2.0) / math.sqrt(shape[0])
-  return Tensor.normal(*shape, mean=0.0, std=std)
-
-
 class Conv2dKaimingNormal(Conv2d):
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
-    self.weight = kaiming_normal(self.weight.shape)
+    self.weight.assign(Tensor.kaiming_normal(*self.weight.shape, a=0.0))
     
 
 class DoubleConv:
@@ -46,7 +39,7 @@ class DoubleConv:
 class DecoderLayer:
   def __init__(self, in_chan, out_chan):
     self.transpose_conv = ConvTranspose2d(in_chan, out_chan, 2, stride=2, bias=False)
-    self.transpose_conv.weight = kaiming_normal(self.transpose_conv.weight.shape)
+    self.transpose_conv.weight.assign(Tensor.kaiming_normal(*self.transpose_conv.weight.shape, a=0.0))
     self.conv = DoubleConv(in_chan, out_chan, True) # in_chan because we do concat with contracting layer
 
   def __call__(self, x: Tensor, c: Tensor) -> Tensor:
@@ -67,7 +60,7 @@ class UNet():
     self.d3 = DecoderLayer(256, 128)
     self.d4 = DecoderLayer(128, 64)
     self.final = Conv2dKaimingNormal(64, 1, 1, bias=False)
-    self.final.bias = Tensor.full_like(self.final.bias, Tensor(POSITIVE_PIXEL_RATIO / (1 - POSITIVE_PIXEL_RATIO + 1e-8)).log())
+    self.final.bias.assign(Tensor.full_like(self.final.bias, Tensor(POSITIVE_PIXEL_RATIO / (1 - POSITIVE_PIXEL_RATIO + 1e-8)).log()))
 
   def __call__(self, x) -> Tensor:
     x1 = self.initial(x)
