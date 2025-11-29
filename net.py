@@ -5,6 +5,9 @@ from tinygrad.nn.state import safe_save, get_state_dict, get_parameters
 from tinygrad.tensor import Tensor
 
 
+# TODO: Look into these initializers: https://github.com/tinygrad/tinygrad/blob/master/examples/mlperf/initializers.py
+
+
 class DoubleConv:
   """
   Each convolutional layer of the U-Net consists of two conv blocks

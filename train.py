@@ -94,7 +94,7 @@ def choose_preview_image() -> str | None:
 
 def run_training(train: Tensor, val: Tensor):
   model = UNet()
-  if len(argv) == 2:
+  if len(argv) > 1:
     state = safe_load(argv[1])  # Load model checkpoint
     load_state_dict(model, state)
     print(f"Loaded model from {argv[1]}.")
@@ -105,8 +105,9 @@ def run_training(train: Tensor, val: Tensor):
     return
   dice = 0
   largest_dice = 0
-  for i in range(1 if len(argv) == 1 else int(argv[1].split("_")[2][:-12]), EPOCHS+1):
-    epoch_msg = f"\nEpoch {i}/{EPOCHS}"
+  epochs = int(argv[2]) if len(argv) == 3 else EPOCHS
+  for i in range(1 if len(argv) == 1 else int(argv[1].split("_")[2][:-12]), epochs+1):
+    epoch_msg = f"\nEpoch {i}/{epochs}"
     print(epoch_msg)
     train_loss = train_epoch(model, train, optim)
     print(f"Train Loss: {train_loss:.6f}")
