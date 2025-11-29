@@ -110,9 +110,10 @@ def run_training(train: Tensor, val: Tensor):
     epoch_msg = f"\nEpoch {i}/{epochs}"
     print(epoch_msg)
     train_loss = train_epoch(model, train, optim)
-    print(f"Train Loss: {train_loss:.6f}")
+    train_loss_msg = f"Train Loss: {train_loss:.6f}"
+    print(train_loss_msg)
     dice = validate(model, val)
-    val_msg = ", ".join([epoch_msg, f"Epoch Validation Dice: {dice:.6f}"])
+    val_msg = ", ".join([epoch_msg, train_loss_msg, f"Epoch Validation Dice: {dice:.6f}"])
     print(val_msg)
     with open("eval_scores.txt", "a") as f: f.write(val_msg)
     if i % 10 == 0:
