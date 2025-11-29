@@ -98,7 +98,7 @@ def run_training(train: Tensor, val: Tensor):
     state = safe_load(argv[1])  # Load model checkpoint
     load_state_dict(model, state)
     print(f"Loaded model from {argv[1]}.")
-  optim = AdamW(get_parameters(model), 1e-3, eps=1e-5)
+  optim = AdamW(get_parameters(model), 1e-3)
   preview_image = choose_preview_image()
   if preview_image is None:
     print("All masks are empty.")
