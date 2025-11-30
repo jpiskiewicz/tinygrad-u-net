@@ -22,7 +22,7 @@ def infer_and_overlap(net: UNet, filename: str, subdir: str, epoch: int = 0):
     display_pred = Image.fromarray(mask_rgb(pred.sigmoid() > 0.5, (0, 0, 255)))
     display_im = Image.fromarray(make_8bit(im)).convert("RGB")
     original_mask = Image.fromarray(mask_rgb(load_mask(filename), (255, 255, 0)))
-    out_path = Path(path.join("predictions", subdir, f"{filename}_{epoch}.png"))
+    out_path = Path(path.join("predictions", subdir, f"{path.split(filename)[1]}_{epoch}.png"))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     Image.blend(display_im, Image.alpha_composite(original_mask, display_pred).convert("RGB"), 0.5).save(out_path)
     print("Saved prediction at", out_path)
@@ -38,4 +38,4 @@ if __name__ == "__main__":
     if argv[2] == "filelist": 
         with open(argv[3]) as f: dirnames = json.load(f)
     else: dirnames = [argv[3]]
-    for dirname in dirnames: infer_and_overlap(net, dirname, path.splitext(argv[2])[0])
+    for dirname in dirnames: infer_and_overlap(net, dirname, "inference")

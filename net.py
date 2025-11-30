@@ -59,8 +59,8 @@ class UNet():
     self.d2 = DecoderLayer(512, 256)
     self.d3 = DecoderLayer(256, 128)
     self.d4 = DecoderLayer(128, 64)
-    self.final = Conv2dKaimingNormal(64, 1, 1, bias=False)
-    self.final.bias.assign(Tensor.full_like(self.final.bias, Tensor(POSITIVE_PIXEL_RATIO / (1 - POSITIVE_PIXEL_RATIO + 1e-8)).log()))
+    self.final = Conv2dKaimingNormal(64, 1, 1)
+    self.final.bias.assign(Tensor.full_like(self.final.bias, Tensor(POSITIVE_PIXEL_RATIO / (1 - POSITIVE_PIXEL_RATIO + 1e-8)).log().numpy()))
 
   def __call__(self, x) -> Tensor:
     x1 = self.initial(x)
