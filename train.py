@@ -7,9 +7,9 @@ from tinygrad.nn.optim import AdamW
 from tinygrad.nn.state import get_parameters, load_state_dict, safe_load
 from tinygrad.helpers import tqdm
 from tinygrad.nn.state import safe_save, get_state_dict
-from dataset import REGEX, choose_files, Dataset, load_mask
+from dataset import REGEX, choose_files, Dataset
 from random import shuffle
-from inference import infer_and_overlap
+from inference import load_combined_mask, infer_and_overlap
 from sys import argv
 import json
 
@@ -41,27 +41,29 @@ def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: AdamW) -> Tenso
     optimizer.zero_grad()
     logits = model(dataset.images[idx])
     label = dataset.labels[idx]
-    smooth = 1e-6
+    # smooth = 1e-6
 
-    # Focal loss
+    # Focal loss (based on https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py)
     gamma = 2.0
-    alpha = 0.25 # TODO: For alpha-balanced CE. Try to set this by inverse class frequency (like explained in the Focal loss paper).
+    alpha = 0.25 # From the table 1 in the focal loss paper
+    p = logits.sigmoid()
     bce = logits.binary_crossentropy_logits(label, reduction="none")
-    pt = (-bce).exp()
-    focal_weight = (label * alpha + (1.0 - label) * (1.0 - alpha)) * (1.0 - pt).pow(gamma)
-    focal_loss = (focal_weight * bce).mean()
+    pt = p * label + (1 - p) * (1 - label)
+    alpha_t = alpha * label + (1 - alpha) * (1 - label)
+    focal_loss = (alpha_t * bce * (1 - pt).pow(gamma)).mean()
 
-    # Tversky loss
-    probs = logits.sigmoid()
-    alpha_t = 0.3
-    beta_t = 0.7
-    gamma_t = 4/3
-    tp = (probs * label).sum()
-    fp = ((1.0 - label) * probs).sum()
-    fn = (label * (1.0 - probs)).sum()
-    focal_tversky_loss = (1.0 - (tp + smooth) / (tp + alpha_t * fp + beta_t * fn + smooth)).pow(gamma_t)
+    # # Tversky loss
+    # probs = logits.sigmoid()
+    # alpha_t = 0.3
+    # beta_t = 0.7
+    # gamma_t = 4/3
+    # tp = (probs * label).sum()
+    # fp = ((1.0 - label) * probs).sum()
+    # fn = (label * (1.0 - probs)).sum()
+    # focal_tversky_loss = (1.0 - (tp + smooth) / (tp + alpha_t * fp + beta_t * fn + smooth)).pow(gamma_t)
 
-    loss = 0.4 * focal_loss + 0.6 * focal_tversky_loss
+    # loss = 0.4 * focal_loss + 0.6 * focal_tversky_loss
+    loss = focal_loss
     loss.backward()
     optimizer.step()
     return loss
@@ -88,7 +90,7 @@ def choose_preview_image() -> str | None:
     """Choose the image that contains the mask"""
     with open("training_files.json") as f: examples = json.load(f)
     for example in examples:
-        if (load_mask(example).max() > 0).numpy(): return example
+        if (load_combined_mask(example).max() > 0).numpy(): return example
     return None
     
 
