@@ -3,7 +3,7 @@
 from net import UNet
 from tinygrad.tensor import Tensor
 from tinygrad.engine.jit import TinyJit
-from tinygrad.nn.optim import AdamW
+from tinygrad.nn.optim import Adam, Optimizer
 from tinygrad.nn.state import get_parameters, load_state_dict, safe_load
 from tinygrad.helpers import tqdm
 from tinygrad.nn.state import safe_save, get_state_dict
@@ -37,39 +37,46 @@ def validate(model: UNet, dataset: Dataset) -> float:
 
 
 @TinyJit
-def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: AdamW) -> Tensor:
+def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: Optimizer) -> Tensor:
     optimizer.zero_grad()
     logits = model(dataset.images[idx])
     label = dataset.labels[idx]
-    # smooth = 1e-6
 
+    smooth = 1e-6
+    
     # Focal loss (based on https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py)
-    gamma = 2.0
-    alpha = 0.25 # From the table 1 in the focal loss paper
-    p = logits.sigmoid()
-    bce = logits.binary_crossentropy_logits(label, reduction="none")
-    pt = p * label + (1 - p) * (1 - label)
-    alpha_t = alpha * label + (1 - alpha) * (1 - label)
-    focal_loss = (alpha_t * bce * (1 - pt).pow(gamma)).mean()
+    # gamma = 2.0
+    # alpha = 0.25 # From the table 1 in the focal loss paper
+    # p = logits.sigmoid()
+    # bce = logits.binary_crossentropy_logits(label, reduction="none")
+    # pt = p * label + (1 - p) * (1 - label)
+    # alpha_t = alpha * label + (1 - alpha) * (1 - label)
+    # focal_loss = (alpha_t * bce * (1 - pt).pow(gamma)).mean()
 
-    # # Tversky loss
+    # Tversky loss
     # probs = logits.sigmoid()
-    # alpha_t = 0.3
-    # beta_t = 0.7
+    # alpha_t = 0.6
+    # beta_t = 0.4
     # gamma_t = 4/3
     # tp = (probs * label).sum()
     # fp = ((1.0 - label) * probs).sum()
     # fn = (label * (1.0 - probs)).sum()
-    # focal_tversky_loss = (1.0 - (tp + smooth) / (tp + alpha_t * fp + beta_t * fn + smooth)).pow(gamma_t)
+    # focal_tversky_loss = (1.0 - (tp + smooth) / (tp + alpha_t * fp + beta_t * fn + smooth)).pow(gamma_t) # TODO: Change it to non-focal
 
-    # loss = 0.4 * focal_loss + 0.6 * focal_tversky_loss
-    loss = focal_loss
+    # Continuous Dice Coefficient (paper: https://www.biorxiv.org/content/10.1101/306977v1)
+    probs = logits.sigmoid()
+    intersect = (probs * label).sum()
+    c = (intersect > 0).where(intersect / (label * probs.sign()).sum(), 1)
+    cdice = (2 * intersect) / (c * label.sum() + probs.sum() + smooth) # TODO: This is sometimes nan. Investigate why this happens.
+
+    # loss = 0.4 * logits.binary_crossentropy_logits(label) + 0.6 * cdice
+    loss = cdice
     loss.backward()
     optimizer.step()
     return loss
 
 
-def train_epoch(model: UNet, dataset: Dataset, optimizer: AdamW) -> float:
+def train_epoch(model: UNet, dataset: Dataset, optimizer: Optimizer) -> float:
     """Train for one epoch"""
     total_loss = 0.0
     l = len(dataset.images)
@@ -94,13 +101,13 @@ def choose_preview_image() -> str | None:
     return None
     
 
-def run_training(train: Tensor, val: Tensor):
+def run_training(train: Dataset, val: Dataset):
   model = UNet()
   if len(argv) > 1:
     state = safe_load(argv[1])  # Load model checkpoint
     load_state_dict(model, state)
     print(f"Loaded model from {argv[1]}.")
-  optim = AdamW(get_parameters(model), 1e-3)
+  optim = Adam(get_parameters(model), 1e-5)
   preview_image = choose_preview_image()
   if preview_image is None:
     print("All masks are empty.")
