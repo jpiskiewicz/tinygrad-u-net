@@ -5,7 +5,7 @@ from sys import argv
 from PIL import Image
 from tinygrad.tensor import Tensor
 from tinygrad.nn.state import load_state_dict, safe_load
-from tinygrad import dtypes 
+from tinygrad.dtype import dtypes
 from dataset import load_image, transform_image, get_masks, load_mask
 from net import UNet
 from pathlib import Path

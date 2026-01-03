@@ -4,12 +4,13 @@ from net import UNet
 from tinygrad.tensor import Tensor
 from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.optim import Adam, Optimizer
-from tinygrad.nn.state import get_parameters, load_state_dict, safe_load
+from tinygrad.nn.state import get_parameters, load_state_dict, safe_load, safe_save, get_state_dict
 from tinygrad.helpers import tqdm
-from tinygrad.nn.state import safe_save, get_state_dict
-from dataset import REGEX, choose_files, Dataset
-from random import shuffle
 from inference import load_combined_mask, infer_and_overlap
+from dataset import TRAIN_DATASET, VAL_DATASET
+from datetime import datetime
+from random import shuffle
+from pathlib import Path
 from sys import argv
 import json
 
@@ -17,16 +18,16 @@ import json
 EPOCHS = 500
 
 
-def validate(model: UNet, dataset: Dataset) -> float:
+def validate(model: UNet, dataset: list[Tensor]) -> float:
     """Validate the model by the means of calculating the DICE coefficient"""
     total_dice = 0.0
-    l = len(dataset.images) 
+    l = int(dataset[0].shape[0])
     
     @TinyJit
     def f(idx: int) -> Tensor:
-        pred = model(dataset.images[idx])
+        pred = model(dataset[0][idx])
         probs = pred.sigmoid()
-        label = dataset.labels[idx]
+        label = dataset[1][idx]
         smooth = 1e-6
         return (2.0 * (probs * label).sum() + smooth) / (probs.sum() + label.sum() + smooth)
       
@@ -37,10 +38,10 @@ def validate(model: UNet, dataset: Dataset) -> float:
 
 
 @TinyJit
-def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: Optimizer) -> Tensor:
+def tiny_step(idx: int, dataset: list[Tensor], model: UNet, optimizer: Optimizer) -> Tensor:
     optimizer.zero_grad()
-    logits = model(dataset.images[idx])
-    label = dataset.labels[idx]
+    logits = model(dataset[0][idx])
+    label = dataset[1][idx]
 
     smooth = 1e-6
     
@@ -66,20 +67,19 @@ def tiny_step(idx: int, dataset: Tensor, model: UNet, optimizer: Optimizer) -> T
     # Continuous Dice Coefficient (paper: https://www.biorxiv.org/content/10.1101/306977v1)
     probs = logits.sigmoid()
     intersect = (probs * label).sum()
-    c = (intersect > 0).where(intersect / (label * probs.sign()).sum(), 1)
-    cdice = (2 * intersect) / (c * label.sum() + probs.sum() + smooth) # TODO: This is sometimes nan. Investigate why this happens.
+    c = (intersect > 0).where(intersect / ((label * probs.sign()).sum() + smooth), 1)
+    cdice = (label.sum() + probs.sum() == 0).where(0, 1 - (2 * intersect) / (c * label.sum() + probs.sum() + smooth))
 
-    # loss = 0.4 * logits.binary_crossentropy_logits(label) + 0.6 * cdice
-    loss = cdice
+    loss = 0.5 * logits.binary_crossentropy_logits(label) + 0.5 * cdice
     loss.backward()
     optimizer.step()
     return loss
 
 
-def train_epoch(model: UNet, dataset: Dataset, optimizer: Optimizer) -> float:
+def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> float:
     """Train for one epoch"""
     total_loss = 0.0
-    l = len(dataset.images)
+    l = int(dataset[0].shape[0])
     
     indices = list(range(l))
     shuffle(indices)
@@ -96,18 +96,19 @@ def train_epoch(model: UNet, dataset: Dataset, optimizer: Optimizer) -> float:
 def choose_preview_image() -> str | None:
     """Choose the image that contains the mask"""
     with open("training_files.json") as f: examples = json.load(f)
+    shuffle(examples)
     for example in examples:
         if (load_combined_mask(example).max() > 0).numpy(): return example
     return None
     
 
-def run_training(train: Dataset, val: Dataset):
+def run_training(train: list[Tensor], val: list[Tensor], model_file: str | None):
   model = UNet()
-  if len(argv) > 1:
-    state = safe_load(argv[1])  # Load model checkpoint
+  if model_file:
+    state = safe_load(model_file)  # Load model checkpoint
     load_state_dict(model, state)
-    print(f"Loaded model from {argv[1]}.")
-  optim = Adam(get_parameters(model), 1e-5)
+    print(f"Loaded model from {model_file}.")
+  optim = Adam(get_parameters(model), 1e-4)
   preview_image = choose_preview_image()
   if preview_image is None:
     print("All masks are empty.")
@@ -127,19 +128,28 @@ def run_training(train: Dataset, val: Dataset):
     with open("eval_scores.txt", "a") as f: f.write(val_msg)
     if i % 10 == 0:
         with Tensor.train(False): infer_and_overlap(model, preview_image, "training_validation", i)
-    if i % 50 == 0:
+    if i % 20 == 0:
         print("Saving the model...")
-        safe_save(get_state_dict(model), f"model_epoch_{i}.safetensors")
+        p = Path(f"models/{datetime.now().strftime('%d-%m-%Y')}/model_epoch_{i}.safetensors")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        safe_save(get_state_dict(model), str(p))
         print("Saved.")
     if dice > largest_dice:
         print("This is the best DICE so far!!!")
         largest_dice = dice
         with Tensor.train(False): infer_and_overlap(model, preview_image, "best_dice", i)
+        
 
+def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to("AMD") for x in loaded.values()]
+
+def load_dataset(filename: str) -> list[Tensor]: return convert_to_device(safe_load(filename))
 
 if __name__ == "__main__":
-  print("Loading dataset...")
-  train, val = [Dataset(x) for x in choose_files(REGEX)]
+  print(f"Loading train dataset from {TRAIN_DATASET}...")
+  train = load_dataset(TRAIN_DATASET)
   print("Dataset loaded.")
-  run_training(train, val)
+  print(f"Loading validation dataset from {VAL_DATASET}...")
+  val = load_dataset(VAL_DATASET)
+  print("Dataset loaded.")
+  run_training(train, val, argv[1] if len(argv) == 2 else None)
   

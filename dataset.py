@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-import random
 import glob
 import json
 
 from tinygrad.engine.jit import TinyJit
+from tinygrad.nn.state import safe_save
 from tinygrad.tensor import Tensor
 from tinygrad.helpers import tqdm
-from helpers import plot_slice
+from random import shuffle
 from PIL import Image
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
@@ -16,11 +16,13 @@ from concurrent.futures import ProcessPoolExecutor
 SLICE = 120
 SIZE = 240
 REGEX = "dataset/**/*(*).png"
+TRAIN_DATASET = "train_dataset.safetensors"
+VAL_DATASET = "val_dataset.safetensors"
 
 
 def choose_files(pattern):
   files = [x[:-4] for x in glob.glob(pattern)]
-  random.shuffle(files)
+  shuffle(files)
   idx = int(len(files) * 0.7)
   train = files[:idx]
   val = files[idx:]
@@ -62,19 +64,22 @@ class Dataset:
   
   def load_multiple(self, paths: list[str]) -> list[np.typing.NDArray]: return [load_image(x) for x in paths]
   
-  def load_images(self, images: list[np.typing.NDArray]): return self.combine([transform_image(x) for x in images])
+  def load_images(self, images: list[np.typing.NDArray]) -> Tensor: return self.combine([transform_image(x) for x in images])
   
-  def load_masks(self, files: list[list[np.typing.NDArray]]): return self.combine([load_mask(x) for x in files])
+  def load_masks(self, files: list[list[np.typing.NDArray]]) -> Tensor: return self.combine([load_mask(x) for x in files])
 
   @TinyJit
   def combine(self, slices: list[Tensor]) -> Tensor: return slices[0].stack(*slices[1:]).realize()
+  
+  def save(self, filename: str): safe_save({ "images": self.images, "labels": self.labels }, filename)
 
 
 if __name__ == "__main__":
    train, val = choose_files(REGEX)
-   print("Creating dataset")
-   dataset = Dataset(val)
-   print("Creating dataset done")
-   for i in range(len(dataset.labels)):
-     plot_slice(dataset.labels[i][0][0])
-     plot_slice(dataset.images[i][0][0])
+   print("Generating datasets from files:")
+   print("Generating training dataset...")
+   Dataset(train).save(TRAIN_DATASET)
+   print("Done.")
+   print("Generating validation dataset...")
+   Dataset(val).save(VAL_DATASET)
+   print("Done.")
