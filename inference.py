@@ -6,15 +6,15 @@ from PIL import Image
 from tinygrad.tensor import Tensor
 from tinygrad.nn.state import load_state_dict, safe_load
 from tinygrad.dtype import dtypes
-from dataset import load_image, transform_image, get_masks, load_mask
+from dataset import load_image, load_image_and_apply_filter, transform_image, get_masks, load_mask, make_array
 from net import UNet
 from pathlib import Path
 import json
 
 
-def load_and_transform(filename: str): return transform_image(load_image(filename))
+def load_and_transform(filename: str): return transform_image(load_image_and_apply_filter(filename))
 
-def load_combined_mask(filename: str): return load_mask([load_image(x) for x in get_masks(filename)])
+def load_combined_mask(filename: str): return load_mask([make_array(load_image(x)) for x in get_masks(filename)])
 
 def make_8bit(im: Tensor) -> Tensor: return ((im - im.min()) / (im.max() - im.min()) * 255).cast(dtypes.uint8)[0][0].numpy()
 

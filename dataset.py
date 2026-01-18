@@ -3,25 +3,26 @@
 import glob
 import json
 
-from tinygrad.engine.jit import TinyJit
+# from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.state import safe_save
 from tinygrad.tensor import Tensor
 from tinygrad.helpers import tqdm
 from random import shuffle
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 
 
-SLICE = 120
+DATASET_SIZE = 14
 SIZE = 240
-REGEX = "dataset/**/*(*).png"
-TRAIN_DATASET = "train_dataset.safetensors"
-VAL_DATASET = "val_dataset.safetensors"
+REGEX = "dataset/benign/*(*).png"
+TRAIN_DATASET = "train_dataset_benign.safetensors"
+VAL_DATASET = "val_dataset_benign.safetensors"
+FILTER = ImageFilter.MedianFilter(size=21)
 
 
 def choose_files(pattern):
-  files = [x[:-4] for x in glob.glob(pattern)]
+  files = [x[:-4] for x in glob.glob(pattern)][:DATASET_SIZE]
   shuffle(files)
   idx = int(len(files) * 0.7)
   train = files[:idx]
@@ -31,12 +32,18 @@ def choose_files(pattern):
   return train, val
   
   
-def load_image(p: str) -> np.typing.NDArray: return np.array(Image.open(p).convert("L"), np.float16)
+def load_image(p: str) -> Image.Image: return Image.open(p).convert("L")
+
+
+def make_array(im: Image.Image) -> np.typing.NDArray: return np.array(im, np.float16)
+
+
+def load_image_and_apply_filter(p: str) -> np.typing.NDArray: return make_array(load_image(p).filter(FILTER))
   
   
 def transform_image(p: np.typing.NDArray) -> Tensor:
+  im = Tensor(p) / 255 # Normalize
   # Resize the Image to exactly INPUT_SIZE and add mirror padding if the other dimension is < INPUT_SIZE
-  im = Tensor(p) / 255
   aspect = min(im.shape) / max(im.shape)
   desired_size = [round(x) for x in (SIZE if im.shape[0] > im.shape[1] else im.shape[0] + (SIZE - im.shape[1]) * aspect, im.shape[1] + (SIZE - im.shape[0]) * aspect if im.shape[0] > im.shape[1] else SIZE)]
   padding = [(SIZE - x) // 2 for x in desired_size]
@@ -58,17 +65,18 @@ class Dataset:
   def __init__(self, files: list[str]):
     image_files, label_files = [x + ".png" for x in files], [get_masks(x) for x in files]
     with ProcessPoolExecutor(12) as executor:
-      images = tqdm(executor.map(load_image, image_files), desc="Loading images", total=len(image_files))
+      images = tqdm(executor.map(load_image_and_apply_filter, image_files), desc="Loading images", total=len(image_files))
       labels = tqdm(executor.map(self.load_multiple, label_files), desc="Loading labels", total=len(label_files))
     self.images, self.labels = self.load_images(images), self.load_masks(labels)
   
-  def load_multiple(self, paths: list[str]) -> list[np.typing.NDArray]: return [load_image(x) for x in paths]
+  def load_multiple(self, paths: list[str]) -> list[np.typing.NDArray]: return [make_array(load_image(x)) for x in paths]
   
   def load_images(self, images: list[np.typing.NDArray]) -> Tensor: return self.combine([transform_image(x) for x in images])
   
   def load_masks(self, files: list[list[np.typing.NDArray]]) -> Tensor: return self.combine([load_mask(x) for x in files])
 
-  @TinyJit
+  # TODO: Jitting this makes it crash in the latest tinygrad. We can uncomment this once this gets fixed. 
+  # @TinyJit
   def combine(self, slices: list[Tensor]) -> Tensor: return slices[0].stack(*slices[1:]).realize()
   
   def save(self, filename: str): safe_save({ "images": self.images, "labels": self.labels }, filename)
