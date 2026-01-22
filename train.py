@@ -15,7 +15,8 @@ from sys import argv
 import json
 
 
-EPOCHS = 500
+EPOCHS = 100
+SAVE_BEST_DICE_PREDICTION = False
 
 
 def validate(model: UNet, dataset: list[Tensor]) -> float:
@@ -46,13 +47,13 @@ def tiny_step(idx: int, dataset: list[Tensor], model: UNet, optimizer: Optimizer
     # smooth = 1e-6
     
     # Focal loss (based on https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py)
-    gamma = 2.0
-    alpha = 0.25 # From the table 1 in the focal loss paper
-    p = logits.sigmoid()
-    bce = logits.binary_crossentropy_logits(label, reduction="none")
-    pt = p * label + (1 - p) * (1 - label)
-    alpha_t = alpha * label + (1 - alpha) * (1 - label)
-    focal_loss = (alpha_t * bce * (1 - pt).pow(gamma)).mean()
+    # gamma = 2.0
+    # alpha = 0.25 # From the table 1 in the focal loss paper
+    # p = logits.sigmoid()
+    # bce = logits.binary_crossentropy_logits(label, reduction="none")
+    # pt = p * label + (1 - p) * (1 - label)
+    # alpha_t = alpha * label + (1 - alpha) * (1 - label)
+    # focal_loss = (alpha_t * bce * (1 - pt).pow(gamma)).mean()
 
     # Tversky loss
     # probs = logits.sigmoid()
@@ -64,13 +65,15 @@ def tiny_step(idx: int, dataset: list[Tensor], model: UNet, optimizer: Optimizer
     # fn = (label * (1.0 - probs)).sum()
     # focal_tversky_loss = (1.0 - (tp + smooth) / (tp + alpha_t * fp + beta_t * fn + smooth)).pow(gamma_t) # TODO: Change it to non-focal
 
-    # Continuous Dice Coefficient (paper: https://www.biorxiv.org/content/10.1101/306977v1)
+    # Continuous DICE Coefficient (paper: https://www.biorxiv.org/content/10.1101/306977v1)
     # probs = logits.sigmoid()
     # intersect = (probs * label).sum()
     # c = (intersect > 0).where(intersect / ((label * probs.sign()).sum() + smooth), 1)
     # cdice = (label.sum() + probs.sum() == 0).where(0, 1 - (2 * intersect) / (c * label.sum() + probs.sum() + smooth))
 
-    loss = 0.3 * logits.binary_crossentropy_logits(label) + 0.7 * focal_loss
+    # DICE
+
+    loss = logits.binary_crossentropy_logits(label)
     loss.backward()
     optimizer.step()
     return loss
@@ -137,7 +140,8 @@ def run_training(train: list[Tensor], val: list[Tensor], model_file: str | None)
     if dice > largest_dice:
         print("This is the best DICE so far!!!")
         largest_dice = dice
-        with Tensor.train(False): infer_and_overlap(model, preview_image, "best_dice", i)
+        if SAVE_BEST_DICE_PREDICTION:
+            with Tensor.train(False): infer_and_overlap(model, preview_image, "best_dice", i)
         
 
 def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to("AMD") for x in loaded.values()]

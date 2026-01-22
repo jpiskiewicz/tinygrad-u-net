@@ -29,7 +29,17 @@ I also think that I should try to decrease amount of examples to something reall
 whether the net can fit to that. If it won't fit then we really need to look into the color space
 compression.
 
-I deacreased the image count to 9 and nothing meaningful came out of this. I think it's a good idea
+I decreased the image count to 9 and nothing meaningful came out of this. I think it's a good idea
 to look into how the values of the network predictions look like after passing them through
 the sigmoid. This will at least tell us whether the net returns some learned values or just zeroes
 everywhere or a direct copy-paste of whatever it sees in the image.
+
+# 2026-01-22
+
+Today I've made another test with a dataset consisting of 4 images edited through the median filter.
+The net used just pure BCE as the loss function. Only for a single one of these images the net
+predicted the proper mask. My assumption is that the network somehow stops training after it sees
+the initial example. I will try to remove the `shuffle()` in `train_epoch()` and see whether this
+would cause the net to predict perfectly only the first example from the list of training files.
+If this turned out to be random then that would mean that we're dealing with some crazy bad
+generalization problem.
