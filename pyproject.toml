@@ -1,0 +1,16 @@
+[project]
+name = "tinygrad_unet"
+version = "0.0.1"
+license = "MIT"
+dependencies = [
+    "Pillow",
+    "tinygrad"
+]
+
+[tool.setuptools]
+packages = [
+    "tinygrad_unet.dataset",
+    "tinygrad_unet.net",
+    "tinygrad_unet.inference"
+]
+

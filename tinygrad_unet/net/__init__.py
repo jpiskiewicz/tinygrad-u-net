@@ -5,6 +5,15 @@ from tinygrad.nn.state import safe_save, get_state_dict, get_parameters
 from tinygrad.tensor import Tensor
 
 
+POSITIVE_PIXEL_RATIO = 0.05
+
+
+class Conv2dKaimingNormal(Conv2d):
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+    self.weight.assign(Tensor.kaiming_normal(*self.weight.shape, a=0.0))
+    
+
 class DoubleConv:
   """
   Each convolutional layer of the U-Net consists of two conv blocks
@@ -13,9 +22,9 @@ class DoubleConv:
   """
 
   def __init__(self, in_chan: int, out_chan: int, upsample: bool = False):
-    self.conv1 = Conv2d(in_chan, out_chan, 3, stride=1 if upsample else 2, padding=1, bias=False)
+    self.conv1 = Conv2dKaimingNormal(in_chan, out_chan, 3, stride=1 if upsample else 2, padding=1, bias=False)
     self.bn1 = BatchNorm(out_chan)
-    self.conv2 = Conv2d(out_chan, out_chan, 3, padding=1, bias=False)
+    self.conv2 = Conv2dKaimingNormal(out_chan, out_chan, 3, padding=1, bias=False)
     self.bn2 = BatchNorm(out_chan)
 
   def __call__(self, x: Tensor) -> Tensor:
@@ -29,7 +38,8 @@ class DoubleConv:
 
 class DecoderLayer:
   def __init__(self, in_chan, out_chan):
-    self.transpose_conv = ConvTranspose2d(in_chan, out_chan, 2, stride=2)
+    self.transpose_conv = ConvTranspose2d(in_chan, out_chan, 2, stride=2, bias=False)
+    self.transpose_conv.weight.assign(Tensor.kaiming_normal(*self.transpose_conv.weight.shape, a=0.0))
     self.conv = DoubleConv(in_chan, out_chan, True) # in_chan because we do concat with contracting layer
 
   def __call__(self, x: Tensor, c: Tensor) -> Tensor:
@@ -49,7 +59,8 @@ class UNet():
     self.d2 = DecoderLayer(512, 256)
     self.d3 = DecoderLayer(256, 128)
     self.d4 = DecoderLayer(128, 64)
-    self.final = Conv2d(64, 1, 1)
+    self.final = Conv2dKaimingNormal(64, 1, 1)
+    self.final.bias.assign(Tensor.full_like(self.final.bias, Tensor(POSITIVE_PIXEL_RATIO / (1 - POSITIVE_PIXEL_RATIO + 1e-8)).log().numpy()))
 
   def __call__(self, x) -> Tensor:
     x1 = self.initial(x)

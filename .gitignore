@@ -3,10 +3,11 @@ __pycache__
 out
 *.safetensors
 papers
-data
 dataset
 .env
 validation_files.json
 training_files.json
 predictions
 eval_scores.txt
+extra/fonts
+*.egg-info
