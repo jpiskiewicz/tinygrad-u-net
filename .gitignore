@@ -9,4 +9,5 @@ validation_files.json
 training_files.json
 predictions
 eval_scores.txt
-extra/generated
+extra/fonts
+*.egg-info

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 
-from net import UNet
 from tinygrad.tensor import Tensor
 from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.optim import Adam, Optimizer
 from tinygrad.nn.state import get_parameters, load_state_dict, safe_load, safe_save, get_state_dict
 from tinygrad.helpers import tqdm
-from inference import load_combined_mask, infer_and_overlap
-from dataset import TRAIN_DATASET, VAL_DATASET
+from tinygrad_unet.net import UNet
+from tinygrad_unet.dataset import TRAIN_DATASET, VAL_DATASET
+from tinygrad_unet.inference import load_combined_mask, infer_and_overlap
 from datetime import datetime
-from random import shuffle
+# from random import shuffle
 from pathlib import Path
 from sys import argv
 import json
 
 
-EPOCHS = 100
+EPOCHS = 200
 SAVE_BEST_DICE_PREDICTION = False
 
 
@@ -47,13 +47,13 @@ def tiny_step(idx: int, dataset: list[Tensor], model: UNet, optimizer: Optimizer
     # smooth = 1e-6
     
     # Focal loss (based on https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py)
-    # gamma = 2.0
-    # alpha = 0.25 # From the table 1 in the focal loss paper
-    # p = logits.sigmoid()
-    # bce = logits.binary_crossentropy_logits(label, reduction="none")
-    # pt = p * label + (1 - p) * (1 - label)
-    # alpha_t = alpha * label + (1 - alpha) * (1 - label)
-    # focal_loss = (alpha_t * bce * (1 - pt).pow(gamma)).mean()
+    alpha = 0.99 # This is the weight assigned to the rare class
+    gamma = 3.5 # This is the focusing factor which decides how important getting right positive predictions is
+    p = logits.sigmoid()
+    bce = logits.binary_crossentropy_logits(label, reduction="none")
+    pt = p * label + (1 - p) * (1 - label)
+    alpha_t = alpha * label + (1 - alpha) * (1 - label)
+    focal_loss = (alpha_t * bce * (1 - pt).pow(gamma)).mean()
 
     # Tversky loss
     # probs = logits.sigmoid()
@@ -73,7 +73,8 @@ def tiny_step(idx: int, dataset: list[Tensor], model: UNet, optimizer: Optimizer
 
     # DICE
 
-    loss = logits.binary_crossentropy_logits(label)
+    # loss = logits.binary_crossentropy_logits(label)
+    loss = focal_loss
     loss.backward()
     optimizer.step()
     return loss
@@ -85,7 +86,7 @@ def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> flo
     l = int(dataset[0].shape[0])
     
     indices = list(range(l))
-    shuffle(indices)
+    # shuffle(indices)
     
     with Tensor.train(True):
       for idx in tqdm(indices, desc="Training"):
@@ -99,7 +100,7 @@ def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> flo
 def choose_preview_image() -> str | None:
     """Choose the image that contains the mask"""
     with open("training_files.json") as f: examples = json.load(f)
-    shuffle(examples)
+    # shuffle(examples)
     for example in examples:
         if (load_combined_mask(example).max() > 0).numpy(): return example
     return None
@@ -156,4 +157,3 @@ if __name__ == "__main__":
   val = load_dataset(VAL_DATASET)
   print("Dataset loaded.")
   run_training(train, val, argv[1] if len(argv) == 2 else None)
-  

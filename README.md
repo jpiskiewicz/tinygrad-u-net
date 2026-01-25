@@ -43,3 +43,36 @@ the initial example. I will try to remove the `shuffle()` in `train_epoch()` and
 would cause the net to predict perfectly only the first example from the list of training files.
 If this turned out to be random then that would mean that we're dealing with some crazy bad
 generalization problem.
+
+# 2026-01-24
+
+I've run the training after removing the shuffles. The trained net made perfect prediction
+only for the second image in the training set.
+
+![first prediction](./readme-data/2026-24-01-first-prediction.png)
+![second prediction](./readme-data/2026-24-01-second-prediction.png)
+
+This makes me think that there is definitely a generalization problem
+bothering us. This looks like it has to do with the discrepancy in
+count of mask pixels vs background pixels. On the initial image
+the net overshot the ground truth mask by a considerable margin.
+On that image the mask region was really small in comparison to
+overall image size. So this looks like a sort of broader
+focusing problem.
+
+Let's maybe try to run the training on the same set of images with
+focal loss function this time. If that doesn't help we can try to
+pivot to something like the Attention U-Net.
+
+Tried focal loss with multiple alpha-gamma combinations.
+The length of training was 100 epochs.
+The ones that look promising so far:
+1. alpha = 0.6, gamma = 0.7;
+2. alpha = 0.9, gamma = 2 
+3. alpha = 0.9, gamma = 3
+4. alpha = 0.99, gamma = 3.5
+
+![alpha = 0.6, gamma = 0.7](./readme-data/focal-alpha0_6-gamma0_7.png)
+![alpha = 0.9, gamma = 2](./readme-data/focal-alpha0_9-gamma2_0.png)
+![alpha = 0.9, gamma = 3](./readme-data/focal-alpha0_9-gamma3_0.png)
+![alpha = 0.99, gamma = 3.5](./readme-data/focal-alpha0_99-gamma3_5.png)

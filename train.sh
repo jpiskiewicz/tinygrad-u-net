@@ -1,2 +1,0 @@
-#!/bin/sh
-REWRITE_STACK_LIMIT=2500000 AMD=1 BEAM=2 ./train.py
