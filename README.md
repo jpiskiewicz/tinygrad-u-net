@@ -101,3 +101,5 @@ Only the areas that were depicted in blue before have noticably higher
 probabilities than the rest of the image.
 
 ![focal + continuous DICE with probabilities](./readme-data/focal-cdice-colour.png)
+
+Next I would like try whether adding Tversky loss to the mix could help.
