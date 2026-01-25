@@ -10,6 +10,7 @@ from tinygrad_unet.dataset import load_image, load_image_and_apply_filter, trans
 from tinygrad_unet.net import UNet
 from pathlib import Path
 import json
+import numpy
 
 
 def load_and_transform(filename: str): return transform_image(load_image_and_apply_filter(filename))
@@ -18,18 +19,20 @@ def load_and_transform(filename: str): return transform_image(load_image_and_app
 def load_combined_mask(filename: str): return load_mask([make_array(load_image(x)) for x in get_masks(filename)])
 
 
-def make_8bit(im: Tensor) -> Tensor: return ((im - im.min()) / (im.max() - im.min()) * 255).cast(dtypes.uint8)[0][0].numpy()
+def make_8bit(im: Tensor) -> numpy.ndarray: return ((im - im.min()) / (im.max() - im.min()) * 255).cast(dtypes.uint8)[0][0].numpy()
 
 
-def mask_rgb(mask: Tensor, color: tuple[int, int, int]) -> Tensor: return (mask.unsqueeze(4).repeat_interleave(4, 4)[0][0] * Tensor(color + (255,))).cast(dtypes.uint8).numpy()
+def mask_rgb(mask: Tensor, color: tuple[int, int, int]) -> numpy.ndarray: return (mask.unsqueeze(4).repeat_interleave(4, 4)[0][0] * Tensor(color + (255,))).cast(dtypes.uint8).numpy()
 
 
-def run_inference(net: UNet, filename: str) -> Image.Image:
+def prediction_single_colour(pred: Tensor) -> numpy.ndarray: return mask_rgb(pred > 0.5, (0, 0, 255))
+
+
+def run_inference(net: UNet, filename: str, draw_prediction=prediction_single_colour) -> Image.Image:
     im = load_and_transform(filename + ".png")
     print("Generating prediction...")
-    pred = net(im)
+    display_pred = Image.fromarray(draw_prediction(net(im).sigmoid()))
     print("Composing overlay of prediction on top of input image...")
-    display_pred = Image.fromarray(mask_rgb(pred.sigmoid() > 0.5, (0, 0, 255)))
     display_im = Image.fromarray(make_8bit(im)).convert("RGB")
     original_mask = Image.fromarray(mask_rgb(load_combined_mask(filename), (255, 255, 0)))
     return Image.blend(display_im, Image.alpha_composite(original_mask, display_pred).convert("RGB"), 0.5)

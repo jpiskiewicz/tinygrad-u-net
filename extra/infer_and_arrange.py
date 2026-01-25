@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 import json
+import numpy
 from sys import argv
-from PIL import Image, ImageDraw, ImageFont
+from tinygrad.dtype import dtypes
+from tinygrad.tensor import Tensor
 from tinygrad.nn.state import load_state_dict, safe_load
+from PIL import Image, ImageDraw, ImageFont
 from tinygrad_unet.inference import run_inference
 from tinygrad_unet.net import UNet
 
@@ -18,6 +21,19 @@ specify the model which created the predictions for easier reference.
 PADDING_TOP = 32
 GRID_GAP = 4
 COLS = 2
+
+
+# def prediction_probability_gradient(pred: Tensor) -> numpy.ndarray:
+#     p = pred[0][0]
+#     half = Tensor(0.5)
+#     t1 = p / half
+#     t2 = (p - half) / half
+#     r = t2.clip(0, 1) * 255
+#     g = Tensor.where(p <= half, t1 * 255, (1 - t2).clip(0, 1) * 255)
+#     b = Tensor.where(p <= half, (1 - t1).clip(0, 1) * 255, Tensor(0))
+#     alpha = p * 255
+#     rgba = Tensor.stack(r, g, b, alpha, dim=2)
+#     return rgba.cast(dtypes.uint8).numpy()
 
 
 if __name__ == "__main__":

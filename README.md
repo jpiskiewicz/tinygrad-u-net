@@ -71,8 +71,33 @@ The ones that look promising so far:
 2. alpha = 0.9, gamma = 2 
 3. alpha = 0.9, gamma = 3
 4. alpha = 0.99, gamma = 3.5
+5. alpha = 0.999, gamma = 4
 
 ![alpha = 0.6, gamma = 0.7](./readme-data/focal-alpha0_6-gamma0_7.png)
 ![alpha = 0.9, gamma = 2](./readme-data/focal-alpha0_9-gamma2_0.png)
 ![alpha = 0.9, gamma = 3](./readme-data/focal-alpha0_9-gamma3_0.png)
 ![alpha = 0.99, gamma = 3.5](./readme-data/focal-alpha0_99-gamma3_5.png)
+![alpha = 0.999, gamma = 4](./readme-data/focal-alpha0_999-gamma4_0.png)
+
+# 2026-01-25
+
+Today I'm experimenting with adding different loss functions to the mix.
+Turns out that adding in BCE actually degrades the training quality.
+I've tried two different proportions: 70% focal + 30% BCE and 80% focal + 20% BCE.
+
+![focal + bce](./readme-data/0_8focal-alpha0_999-gamma3_0-0_2bce.png)
+
+I also managed to try adding continuous DICE to the mix. It didin't help.
+It actually peformed slightly worse than focal alone on the example with
+the smallest tumor.
+
+![focal + continuous DICE](./readme-data/focal-cdice.png)
+
+A thought came to my mind that displaying the network's output as a probability
+map with different colours representing different probabilities might be also
+helpful for debugging.
+I tried that and the prediction don't really look that different.
+Only the areas that were depicted in blue before have noticably higher
+probabilities than the rest of the image.
+
+![focal + continuous DICE with probabilities](./readme-data/focal-cdice-colour.png)

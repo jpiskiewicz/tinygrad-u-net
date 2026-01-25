@@ -15,7 +15,7 @@ from sys import argv
 import json
 
 
-EPOCHS = 200
+EPOCHS = 500
 SAVE_BEST_DICE_PREDICTION = False
 
 
@@ -44,11 +44,11 @@ def tiny_step(idx: int, dataset: list[Tensor], model: UNet, optimizer: Optimizer
     logits = model(dataset[0][idx])
     label = dataset[1][idx]
 
-    # smooth = 1e-6
+    smooth = 1e-6
     
     # Focal loss (based on https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py)
-    alpha = 0.99 # This is the weight assigned to the rare class
-    gamma = 3.5 # This is the focusing factor which decides how important getting right positive predictions is
+    alpha = 0.999 # This is the weight assigned to the rare class
+    gamma = 3 # This is the focusing factor which decides how important getting right positive predictions is
     p = logits.sigmoid()
     bce = logits.binary_crossentropy_logits(label, reduction="none")
     pt = p * label + (1 - p) * (1 - label)
@@ -66,15 +66,12 @@ def tiny_step(idx: int, dataset: list[Tensor], model: UNet, optimizer: Optimizer
     # focal_tversky_loss = (1.0 - (tp + smooth) / (tp + alpha_t * fp + beta_t * fn + smooth)).pow(gamma_t) # TODO: Change it to non-focal
 
     # Continuous DICE Coefficient (paper: https://www.biorxiv.org/content/10.1101/306977v1)
-    # probs = logits.sigmoid()
-    # intersect = (probs * label).sum()
-    # c = (intersect > 0).where(intersect / ((label * probs.sign()).sum() + smooth), 1)
-    # cdice = (label.sum() + probs.sum() == 0).where(0, 1 - (2 * intersect) / (c * label.sum() + probs.sum() + smooth))
+    probs = logits.sigmoid()
+    intersect = (probs * label).sum()
+    c = (intersect > 0).where(intersect / ((label * probs.sign()).sum() + smooth), 1)
+    cdice = (label.sum() + probs.sum() == 0).where(0, 1 - (2 * intersect) / (c * label.sum() + probs.sum() + smooth))
 
-    # DICE
-
-    # loss = logits.binary_crossentropy_logits(label)
-    loss = focal_loss
+    loss = 0.8 * focal_loss + 0.2 * cdice
     loss.backward()
     optimizer.step()
     return loss
