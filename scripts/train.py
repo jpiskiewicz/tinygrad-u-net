@@ -9,7 +9,7 @@ from tinygrad_unet.net import UNet
 from tinygrad_unet.dataset import TRAIN_DATASET, VAL_DATASET
 from tinygrad_unet.inference import load_combined_mask, infer_and_overlap
 from datetime import datetime
-# from random import shuffle
+from random import shuffle
 from pathlib import Path
 from sys import argv
 import json
@@ -79,7 +79,7 @@ def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> flo
     l = int(dataset[0].shape[0])
     
     indices = list(range(l))
-    # shuffle(indices)
+    shuffle(indices)
     
     with Tensor.train(True):
       for idx in tqdm(indices, desc="Training"):
@@ -93,7 +93,7 @@ def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> flo
 def choose_preview_image() -> str | None:
     """Choose the image that contains the mask"""
     with open("training_files.json") as f: examples = json.load(f)
-    # shuffle(examples)
+    shuffle(examples)
     for example in examples:
         if (load_combined_mask(example).max() > 0).numpy(): return example
     return None

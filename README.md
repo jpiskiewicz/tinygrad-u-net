@@ -103,3 +103,16 @@ probabilities than the rest of the image.
 ![focal + continuous DICE with probabilities](./readme-data/focal-cdice-colour.png)
 
 Next I would like try whether adding Tversky loss to the mix could help.
+
+# 2026-01-25
+
+Remember how some time ago I started suspecting that the model might actually learn
+only from the initial image in the dataset and ignore all other images? When trying out
+Tversky loss I regenerated the dataset and I observed that the only image which was
+properly segmented occupies the same place in the grid as the sole good prediction
+in all the grids I've generated before. Just to be sure I regenerated the dataset
+once again and the same pattern appeared. What's following are predictions made
+using the Tversky loss with alpha = 0.85 and beta = 0.15 on two different datasets.
+
+![first image generated using Tversky loss](./readme-data/tversky.png)
+![second image generated using Tversky loss](./readme-data/tversky2.png)
