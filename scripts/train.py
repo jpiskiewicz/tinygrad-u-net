@@ -5,7 +5,6 @@ from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.optim import Adam, Optimizer
 from tinygrad.nn.state import get_parameters, load_state_dict, safe_load, safe_save, get_state_dict
 from tinygrad.helpers import tqdm
-from tinygrad.dtype import dtypes
 from tinygrad_unet.net import UNet
 from tinygrad_unet.dataset import TRAIN_DATASET, VAL_DATASET
 from tinygrad_unet.inference import load_combined_mask, infer_and_overlap
@@ -56,8 +55,8 @@ def tiny_step(example: Tensor, label: Tensor, model: UNet, optimizer: Optimizer)
     # focal_loss = (alpha_t * bce * (1 - pt).pow(gamma)).mean()
 
     # Tversky loss
-    alpha = 0.85
-    beta = 0.15
+    alpha = 0.3 # Weight of false-positives
+    beta = 0.7 # Weight of false-negatives
     s = (p * label).sum()
     tversky_loss = 1 - s / (s + alpha * (p * (1 - label)).sum() + beta * ((1 - p) * label).sum())
 

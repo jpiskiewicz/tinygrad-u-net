@@ -12,8 +12,8 @@ import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 
 
-TRAINING_SIZE = 4
-VALIDATION_PART = 0.5
+TRAINING_SIZE = 394
+VALIDATION_PART = 0.1
 SIZE = 240
 REGEX = "dataset/benign/*(*).png"
 TRAIN_DATASET = "compiled_datasets/train_dataset_benign.safetensors"
@@ -27,6 +27,7 @@ def choose_files(pattern):
   shuffle(files)
   train = files[:TRAINING_SIZE]
   val = files[TRAINING_SIZE:TRAINING_SIZE+validation_size]
+  print(len(train), len(val))
   with open("training_files.json", "w") as f: json.dump(train, f, indent=2)
   with open("validation_files.json", "w") as f: json.dump(val, f, indent=2)
   return train, val

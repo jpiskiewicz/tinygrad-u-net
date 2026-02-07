@@ -142,4 +142,13 @@ The output from the net trained by the jitted training function is now the same 
 the one trained on a non-jitted function. The outputs aren't yet perfect but I
 can finally see a path to success. I will try to adjust the hyperparameters and
 see whether this helps.
-now a 
+
+I trained the net on all of the images from the benign category for 500 epochs using
+Tversky loss with alpha = 0.3 and beta = 0.7. The results are the best I've seen so far.
+Below are predictions made on two sets of 4 images from the training set. There are some
+errors but this is nothing that cannot be fixed by adjusting parameters of Tversky.
+Tomorrow I'm planning doing some test inference on the validation dataset.
+I don't expect great generalization performance here just yet but I'm still very
+interested in seeing the results.
+![first set of predictions](./readme-data/tversky-a0_3-b0_7-full-dataset.png)
+![second set of predictions](./readme-data/tversky-a0_3-b0_7-full-dataset-3.png)
