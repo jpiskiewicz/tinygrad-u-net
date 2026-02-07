@@ -104,7 +104,7 @@ probabilities than the rest of the image.
 
 Next I would like try whether adding Tversky loss to the mix could help.
 
-# 2026-01-25
+# 2026-01-27
 
 Remember how some time ago I started suspecting that the model might actually learn
 only from the initial image in the dataset and ignore all other images? When trying out
@@ -116,3 +116,30 @@ using the Tversky loss with alpha = 0.85 and beta = 0.15 on two different datase
 
 ![first image generated using Tversky loss](./readme-data/tversky.png)
 ![second image generated using Tversky loss](./readme-data/tversky2.png)
+
+I have no idea why this is happening. This is actually a little bittersweet since
+this means the model is actually learning but the model "locks" somehow after it
+learns only one label. I have a suspicion that tinygrad's JIT somehow locks the
+arguments of the training function in place after the training gets to the second
+image in the set. Will try to train once without JIT and see whether the output
+will be different.
+
+# 2026-02-05
+The model trained without JIT performed way better than the one we've seen in [[27-01]].
+![model trained without jit](./readme-data/tversky-no-jit.png)
+So now we should figure out what's causing the training routine to get stuck on one picture.
+
+I tried to do some adjustments
+(mainly creating a tensor and putting different indexes to it and passing it to `training_step`)
+but it didn't work. Tomorrow I will try some other ways to fix this.
+
+# 2026-02-07
+I managed to fix the problem with JIT. I modified the training function so that it now
+takes two parameters which are the image and label tensors instead of taking the index
+and choosing the image and label inside the function.
+
+The output from the net trained by the jitted training function is now the same as
+the one trained on a non-jitted function. The outputs aren't yet perfect but I
+can finally see a path to success. I will try to adjust the hyperparameters and
+see whether this helps.
+now a 

@@ -5,6 +5,7 @@ from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.optim import Adam, Optimizer
 from tinygrad.nn.state import get_parameters, load_state_dict, safe_load, safe_save, get_state_dict
 from tinygrad.helpers import tqdm
+from tinygrad.dtype import dtypes
 from tinygrad_unet.net import UNet
 from tinygrad_unet.dataset import TRAIN_DATASET, VAL_DATASET
 from tinygrad_unet.inference import load_combined_mask, infer_and_overlap
@@ -39,10 +40,9 @@ def validate(model: UNet, dataset: list[Tensor]) -> float:
 
 
 @TinyJit
-def tiny_step(idx: int, dataset: list[Tensor], model: UNet, optimizer: Optimizer) -> Tensor:
+def tiny_step(example: Tensor, label: Tensor, model: UNet, optimizer: Optimizer) -> Tensor:
     optimizer.zero_grad()
-    logits = model(dataset[0][idx])
-    label = dataset[1][idx]
+    logits = model(example)
 
     # smooth = 1e-6
     
@@ -77,13 +77,13 @@ def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> flo
     """Train for one epoch"""
     total_loss = 0.0
     l = int(dataset[0].shape[0])
-    
     indices = list(range(l))
     shuffle(indices)
-    
+
     with Tensor.train(True):
-      for idx in tqdm(indices, desc="Training"):
-        loss = tiny_step(idx, dataset, model, optimizer)
+      for i in tqdm(indices, desc="Training"):
+        example, label = dataset[0][i].contiguous(), dataset[1][i].contiguous()
+        loss = tiny_step(example, label, model, optimizer)
         # TODO: Print the gradients here to check whether they are diminishing.
         total_loss += loss.numpy()
     
