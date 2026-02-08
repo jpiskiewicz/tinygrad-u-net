@@ -126,7 +126,9 @@ will be different.
 
 # 2026-02-05
 The model trained without JIT performed way better than the one we've seen in [[27-01]].
+
 ![model trained without jit](./readme-data/tversky-no-jit.png)
+
 So now we should figure out what's causing the training routine to get stuck on one picture.
 
 I tried to do some adjustments
@@ -150,6 +152,7 @@ errors but this is nothing that cannot be fixed by adjusting parameters of Tvers
 Tomorrow I'm planning doing some test inference on the validation dataset.
 I don't expect great generalization performance here just yet but I'm still very
 interested in seeing the results.
+
 ![first set of predictions](./readme-data/tversky-a0_3-b0_7-full-dataset.png)
 ![second set of predictions](./readme-data/tversky-a0_3-b0_7-full-dataset-3.png)
 
@@ -158,17 +161,23 @@ I did some testing of the neural net trained on the full benign dataset and it f
 better than expected on the validation set. It still definitely needs improvements
 in the realm of generalization though so I should look into some generalization
 methods that would work well for this type of workload.
+
 ![inference output on val set 1](./readme-data/tversky-a0_3-b0_7-val.png)
 ![inference output on val set 2](./readme-data/tversky-a0_3-b0_7-val-2.png)
+
 I also did inference on four images taken from the malignant set
 (which I didn't use for training) and as expected - it fared very poorly.
 Although to the net's credit it looks like there weren't any false-positives present]
 in the output.
+
 ![inference output on the malignant set](./readme-data/tversky-a0_3-b0_7-malignant.png)
+
 I'm right now training the net on the entire dataset and so far it definitely fares better
 than before. Just look at the output for the same set of images from that net. All
 hyperparams are the same.
+
 ![inference output on the malignant set (net trained on full dataset)](./readme-data/tversky-a0_3-b0_7-malignant-full.png)
+
 This is inference on a model that has trained for 200 epochs. I'm waiting for training
 to end to do a real apples to apples comparison. We can in the meantime write a function
 that does some uniform transforms on the images before every epoch in order to
