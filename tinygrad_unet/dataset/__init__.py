@@ -12,22 +12,22 @@ import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 
 
-TRAINING_SIZE = 394
+TRAINING_SIZE = 750
 VALIDATION_PART = 0.1
 SIZE = 240
-REGEX = "dataset/benign/*(*).png"
 TRAIN_DATASET = "compiled_datasets/train_dataset_benign.safetensors"
 VAL_DATASET = "compiled_datasets/val_dataset_benign.safetensors"
 FILTER = ImageFilter.MedianFilter(size=21)
 
 
-def choose_files(pattern):
+def choose_files(patterns):
   validation_size = int(TRAINING_SIZE * VALIDATION_PART)
-  files = [x[:-4] for x in glob.glob(pattern)]
+  files = [x[:-4] for pattern in patterns for x in glob.glob(pattern)]
   shuffle(files)
   train = files[:TRAINING_SIZE]
   val = files[TRAINING_SIZE:TRAINING_SIZE+validation_size]
   print(len(train), len(val))
+  assert len(train) > 0 and len(val) > 0
   with open("training_files.json", "w") as f: json.dump(train, f, indent=2)
   with open("validation_files.json", "w") as f: json.dump(val, f, indent=2)
   return train, val

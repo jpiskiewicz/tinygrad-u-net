@@ -153,7 +153,7 @@ interested in seeing the results.
 ![first set of predictions](./readme-data/tversky-a0_3-b0_7-full-dataset.png)
 ![second set of predictions](./readme-data/tversky-a0_3-b0_7-full-dataset-3.png)
 
-# 20206-02-08
+# 2026-02-08
 I did some testing of the neural net trained on the full benign dataset and it fares
 better than expected on the validation set. It still definitely needs improvements
 in the realm of generalization though so I should look into some generalization
@@ -165,3 +165,14 @@ I also did inference on four images taken from the malignant set
 Although to the net's credit it looks like there weren't any false-positives present]
 in the output.
 ![inference output on the malignant set](./readme-data/tversky-a0_3-b0_7-malignant.png)
+I'm right now training the net on the entire dataset and so far it definitely fares better
+than before. Just look at the output for the same set of images from that net. All
+hyperparams are the same.
+![inference output on the malignant set (net trained on full dataset)](./readme-data/tversky-a0_3-b0_7-malignant-full.png)
+This is inference on a model that has trained for 200 epochs. I'm waiting for training
+to end to do a real apples to apples comparison. We can in the meantime write a function
+that does some uniform transforms on the images before every epoch in order to
+artificially increase the amount of examples. I think that this is the easiest way to gain
+some generalization. Then we could also try using Focal loss instead of Tversky because
+now that the net is actually being properly trained. I want to know whether Focal can
+actually get us any advantage vs Tversky on the hard examples.

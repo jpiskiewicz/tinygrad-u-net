@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 
-from tinygrad_unet.dataset import REGEX, TRAIN_DATASET, VAL_DATASET, choose_files, Dataset
+from tinygrad_unet.dataset import TRAIN_DATASET, VAL_DATASET, choose_files, Dataset
 
+PATTERNS = [
+    "dataset/benign/*(*).png",
+    "dataset/malignant/*(*).png",
+    "dataset/normal/*(*).png"
+]
 
 if __name__ == "__main__":
-   train, val = choose_files(REGEX)
+   train, val = choose_files(PATTERNS)
    print("Generating datasets from files:")
    print("Generating training dataset...")
    Dataset(train).save(TRAIN_DATASET)
