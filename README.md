@@ -152,3 +152,16 @@ I don't expect great generalization performance here just yet but I'm still very
 interested in seeing the results.
 ![first set of predictions](./readme-data/tversky-a0_3-b0_7-full-dataset.png)
 ![second set of predictions](./readme-data/tversky-a0_3-b0_7-full-dataset-3.png)
+
+# 20206-02-08
+I did some testing of the neural net trained on the full benign dataset and it fares
+better than expected on the validation set. It still definitely needs improvements
+in the realm of generalization though so I should look into some generalization
+methods that would work well for this type of workload.
+![inference output on val set 1](./readme-data/tversky-a0_3-b0_7-val.png)
+![inference output on val set 2](./readme-data/tversky-a0_3-b0_7-val-2.png)
+I also did inference on four images taken from the malignant set
+(which I didn't use for training) and as expected - it fared very poorly.
+Although to the net's credit it looks like there weren't any false-positives present]
+in the output.
+![inference output on the malignant set](./readme-data/tversky-a0_3-b0_7-malignant.png)
