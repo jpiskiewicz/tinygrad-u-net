@@ -8,6 +8,7 @@ from tinygrad.nn.state import load_state_dict, safe_load
 from tinygrad.dtype import dtypes
 from tinygrad_unet.dataset import load_image, load_image_and_apply_filter, transform_image, get_masks, load_mask, make_array
 from tinygrad_unet.net import UNet
+from tinygrad_unet.util import make_8bit
 from pathlib import Path
 import json
 import numpy
@@ -17,9 +18,6 @@ def load_and_transform(filename: str): return transform_image(load_image_and_app
 
 
 def load_combined_mask(filename: str): return load_mask([make_array(load_image(x)) for x in get_masks(filename)])
-
-
-def make_8bit(im: Tensor) -> numpy.ndarray: return ((im - im.min()) / (im.max() - im.min()) * 255).cast(dtypes.uint8)[0][0].numpy()
 
 
 def mask_rgb(mask: Tensor, color: tuple[int, int, int]) -> numpy.ndarray: return (mask.unsqueeze(4).repeat_interleave(4, 4)[0][0] * Tensor(color + (255,))).cast(dtypes.uint8).numpy()

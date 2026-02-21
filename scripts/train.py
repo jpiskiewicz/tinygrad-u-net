@@ -6,7 +6,7 @@ from tinygrad.nn.optim import Adam, Optimizer
 from tinygrad.nn.state import get_parameters, load_state_dict, safe_load, safe_save, get_state_dict
 from tinygrad.helpers import tqdm
 from tinygrad_unet.net import UNet
-from tinygrad_unet.dataset import TRAIN_DATASET, VAL_DATASET
+from tinygrad_unet.dataset import TRAIN_DATASET, VAL_DATASET, load_dataset
 from tinygrad_unet.inference import load_combined_mask, infer_and_overlap
 from datetime import datetime
 from random import shuffle
@@ -136,10 +136,6 @@ def run_training(train: list[Tensor], val: list[Tensor], model_file: str | None)
         if SAVE_BEST_DICE_PREDICTION:
             with Tensor.train(False): infer_and_overlap(model, preview_image, "best_dice", i)
         
-
-def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to("AMD") for x in loaded.values()]
-
-def load_dataset(filename: str) -> list[Tensor]: return convert_to_device(safe_load(filename))
 
 if __name__ == "__main__":
   print(f"Loading train dataset from {TRAIN_DATASET}...")

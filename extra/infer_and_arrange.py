@@ -39,7 +39,7 @@ COLS = 2
 if __name__ == "__main__":
     net = UNet()
     load_state_dict(net, safe_load(argv[1]))
-    with open(argv[2]) as f: dirnames = json.load(f)
+    with open(argv[2]) as f: dirnames = json.load(f)[:4]
     images = [run_inference(net, "../" + x) for x in dirnames]
     image_width, image_height = images[0].size
     rows = len(images) // COLS

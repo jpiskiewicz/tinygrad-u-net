@@ -3,21 +3,28 @@
 import glob
 import json
 # from tinygrad.engine.jit import TinyJit
-from tinygrad.nn.state import safe_save
+from tinygrad.nn.state import safe_load, safe_save
 from tinygrad.tensor import Tensor
 from tinygrad.helpers import tqdm
-from random import shuffle
+from tinygrad_unet.util import make_8bit
+from random import shuffle, choice, random
 from PIL import Image, ImageFilter
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
+from typing import Callable
+import math
 
 
-TRAINING_SIZE = 750
+TRAINING_SIZE = 10
 VALIDATION_PART = 0.1
 SIZE = 240
-TRAIN_DATASET = "compiled_datasets/train_dataset_benign.safetensors"
-VAL_DATASET = "compiled_datasets/val_dataset_benign.safetensors"
+TRAIN_DATASET = "compiled_datasets/train_dataset_test.safetensors"
+VAL_DATASET = "compiled_datasets/val_dataset_test.safetensors"
 FILTER = ImageFilter.MedianFilter(size=21)
+
+
+def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to("AMD") for x in loaded.values()]
+def load_dataset(filename: str) -> list[Tensor]: return convert_to_device(safe_load(filename))
 
 
 def choose_files(patterns):
@@ -81,4 +88,126 @@ class Dataset:
   def combine(self, slices: list[Tensor]) -> Tensor: return slices[0].stack(*slices[1:]).realize()
   
   def save(self, filename: str): safe_save({ "images": self.images, "labels": self.labels }, filename)
-
+  
+  
+type Transform = Callable[[Image.Image], Image.Image]
+  
+class TrivialAugument:
+  """
+  This class is to be used in a separate script than the one that contains the training routine.
+  During training this class will generate new transforms of the training dataset which will be
+  saved in new .safetensors files which then will be ingested by the training routine.
+  The whole thing is to run in a separate thread so that it doesn't slow down the training process.
+  """
+  def __init__(self, dataset: list[Tensor]):
+    # Convert tensors to PIL images,
+    self.images, self.labels = [Image.fromarray(make_8bit(x)) for x in dataset[0]], [Image.fromarray(make_8bit(x)) for x in dataset[1]]
+    self.transformations = [self.rotate, self.zoom, self.translate]
+   
+  def rotate(self, s: float) -> Transform:
+      print(f"rotate({s})")
+      def f(img: Image.Image) -> Image.Image:
+        angle = s * 45
+        # Original dimensions
+        w, h = img.size
+        
+        # Convert angle to radians for math functions
+        angle_rad = math.radians(angle)
+        
+        # Compute the expanded bounding box size after rotation (for the canvas)
+        cos_a = abs(math.cos(angle_rad))
+        sin_a = abs(math.sin(angle_rad))
+        new_w = int(math.ceil(w * cos_a + h * sin_a))
+        new_h = int(math.ceil(w * sin_a + h * cos_a))
+        
+        # Perform the rotation with expansion (transparent fill for corners)
+        rotated = img.rotate(angle, resample=Image.BICUBIC, expand=True)
+        
+        width_is_longer = w >= h
+        side_long, side_short = (w, h) if width_is_longer else (h, w)
+        
+        sin_a_val, cos_a_val = abs(math.sin(angle_rad)), abs(math.cos(angle_rad))
+        
+        if side_short <= 2.0 * sin_a_val * cos_a_val * side_long or abs(sin_a_val - cos_a_val) < 1e-10:
+            # Half-constrained: two crop corners touch the longer side
+            x = 0.5 * side_short
+            wr, hr = (x / sin_a_val, x / cos_a_val) if width_is_longer else (x / cos_a_val, x / sin_a_val)
+        else:
+            # Fully-constrained: crop touches all 4 sides
+            cos_2a = cos_a_val * cos_a_val - sin_a_val * sin_a_val
+            wr = (w * cos_a_val - h * sin_a_val) / cos_2a
+            hr = (h * cos_a_val - w * sin_a_val) / cos_2a
+        
+        # Ensure positive dimensions and round to int
+        wr = max(0, int(math.floor(wr)))
+        hr = max(0, int(math.floor(hr)))
+        
+        # Crop from the center of the rotated image
+        left = (new_w - wr) // 2
+        top = (new_h - hr) // 2
+        right = left + wr
+        bottom = top + hr
+        
+        cropped = rotated.crop((left, top, right, bottom))
+        
+        return cropped
+      return f
+    
+  def zoom(self, s: float) -> Transform:
+    print(f"zoom({s})")
+    def f(img: Image.Image) -> Image.Image:
+      # TODO: Maybe add support for zooming out and reflect?
+      crop = SIZE * s * 0.25
+      border = crop // 2
+      return img.crop((border, border, SIZE - border, SIZE - border))
+    return f
+    
+  def translate(self, s: float) -> Transform:
+    print(f"translate({s})")
+    def f(img: Image.Image) -> Image.Image:
+      size = img.size[0]          # since square → width = height
+      max_shift = size * 0.25     # 25% of side length
+  
+      # Angle: 0° = right, 90° = down, 180° = left, 270° = up
+      angle_deg = s * 360
+      angle_rad = math.radians(angle_deg)
+  
+      # Displacement vector (positive = content moves in that direction)
+      dx = math.cos(angle_rad) * max_shift   # x: positive = right
+      dy = math.sin(angle_rad) * max_shift   # y: positive = down
+  
+      # Crop amounts (we crop opposite to movement direction)
+      left   = max(0,  dx)     # crop left   when moving content right
+      right  = max(0, -dx)     # crop right  when moving content left
+      top    = max(0,  dy)     # crop top    when moving content down
+      bottom = max(0, -dy)     # crop bottom when moving content up
+  
+      # Create crop box (all values are safe since max_shift = 0.25×size)
+      crop_box = (
+          int(left),           # left
+          int(top),            # top
+          int(size - right),   # right
+          int(size - bottom)   # bottom
+      )
+      return img.crop(crop_box)
+    return f
+    
+  # def elastic_deformation(self, img: Image.Image, s: float) -> Image.Image:
+  #   pass
+    
+  def apply(self, img: Image.Image, transform: Transform) -> Tensor: return (Tensor(make_array(transform(img))) / 255).interpolate((SIZE, SIZE), "nearest-exact").expand(1, 1, -1, -1)
+  
+  def run_transform(self, image: Image.Image, label: Image.Image) -> tuple[Tensor, Tensor]:
+    transform = choice(self.transformations)(random())
+    return self.apply(image, transform), self.apply(label, transform)
+    
+  def augument(self) -> list[Tensor]:
+    print("Performing TrivialAugument on the dataset...")
+    images: list[Tensor] = []
+    labels: list[Tensor] = []
+    for i in range(len(self.images)):
+      image, label = self.run_transform(self.images[i], self.labels[i])
+      images.append(image)
+      labels.append(label)
+    return [images[0].stack(*images[1:]).realize(), labels[0].stack(*labels[1:]).realize()]
+  

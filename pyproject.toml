@@ -11,6 +11,10 @@ dependencies = [
 packages = [
     "tinygrad_unet.dataset",
     "tinygrad_unet.net",
-    "tinygrad_unet.inference"
+    "tinygrad_unet.inference",
+    "tinygrad_unet.util"
 ]
 
+[tool.pyright]
+extraPaths = ["tinygrad"]
+# typeCheckingMode = "basic"  # Less strict for dynamic tinygrad
