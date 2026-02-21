@@ -13,6 +13,8 @@ from random import shuffle
 from pathlib import Path
 from sys import argv
 import json
+import glob
+import re
 
 
 EPOCHS = 500
@@ -98,7 +100,20 @@ def choose_preview_image() -> str | None:
     return None
     
 
-def run_training(train: list[Tensor], val: list[Tensor], model_file: str | None):
+def get_latest_dataset(i: int) -> str:
+  if i == 0: return TRAIN_DATASET
+  augumented_datasets = glob.glob(f"{TRAIN_DATASET.split('.')[0]}_*.safetensors")
+  if len(augumented_datasets) == 0: return TRAIN_DATASET
+  return sorted(augumented_datasets, key=lambda x: int(re.search(r'_(\d+)', x).group(1)))[:i][-1]
+    
+
+def load_augumented_dataset(i: int) -> list[Tensor]:
+  dataset_file = get_latest_dataset(i)
+  print(f'For this epoch using the dataset from "{dataset_file}".')
+  return load_dataset(dataset_file)
+    
+
+def run_training(val: list[Tensor], epochs: int, model_file: str | None):
   model = UNet()
   if model_file:
     state = safe_load(model_file)  # Load model checkpoint
@@ -111,10 +126,10 @@ def run_training(train: list[Tensor], val: list[Tensor], model_file: str | None)
     return
   dice = 0
   largest_dice = 0
-  epochs = int(argv[2]) if len(argv) == 3 else EPOCHS
-  for i in range(1 if len(argv) == 1 else int(argv[1].split("_")[2][:-12]), epochs+1):
+  for i in range(1 if model_file is None else int(model_file.split("_")[2][:-12]), epochs+1):
     epoch_msg = f"\nEpoch {i}/{epochs}"
     print(epoch_msg)
+    train = load_augumented_dataset(i)
     train_loss = train_epoch(model, train, optim)
     train_loss_msg = f"Train Loss: {train_loss:.6f}"
     print(train_loss_msg)
@@ -138,10 +153,7 @@ def run_training(train: list[Tensor], val: list[Tensor], model_file: str | None)
         
 
 if __name__ == "__main__":
-  print(f"Loading train dataset from {TRAIN_DATASET}...")
-  train = load_dataset(TRAIN_DATASET)
-  print("Dataset loaded.")
   print(f"Loading validation dataset from {VAL_DATASET}...")
   val = load_dataset(VAL_DATASET)
   print("Dataset loaded.")
-  run_training(train, val, argv[1] if len(argv) == 2 else None)
+  run_training(val, int(argv[1]) if len(argv) == 2 else EPOCHS, argv[2] if len(argv) == 3 else None)
