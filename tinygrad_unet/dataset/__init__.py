@@ -18,8 +18,8 @@ import math
 TRAINING_SIZE = 10
 VALIDATION_PART = 0.1
 SIZE = 240
-TRAIN_DATASET = "compiled_datasets/train_dataset_test.safetensors"
-VAL_DATASET = "compiled_datasets/val_dataset_test.safetensors"
+TRAIN_DATASET = "compiled_datasets/train_dataset.safetensors"
+VAL_DATASET = "compiled_datasets/val_dataset.safetensors"
 FILTER = ImageFilter.MedianFilter(size=21)
 
 
