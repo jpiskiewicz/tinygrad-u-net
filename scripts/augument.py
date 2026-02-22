@@ -14,7 +14,7 @@ from sys import argv
 if __name__ == "__main__":
   dataset = TrivialAugument(load_dataset(TRAIN_DATASET))
   epochs = int(argv[1])
-  for i in range(2, epochs + 1): 
+  for i in range(2 if len(argv) == 2 else int(argv[2]), epochs + 1): 
     images, labels = dataset.augument()
     safe_save({ "images": images, "labels": labels }, f"{TRAIN_DATASET.split('.')[0]}_{i}.safetensors")
   print(f"TrivialAugument script completed. Dataset is ready for {epochs} epochs.")
