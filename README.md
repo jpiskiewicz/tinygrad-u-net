@@ -186,6 +186,27 @@ some generalization. Then we could also try using Focal loss instead of Tversky 
 now that the net is actually being properly trained. I want to know whether Focal can
 actually get us any advantage vs Tversky on the hard examples.
 
+# 2026-02-22
+During the past week I managed to write the initial working version of the `TrivialAugument`.
+I only really managed to test it in training for 10 epochs (and only once so I don't know whether
+the output looks good because an easy image got chosen at random) but the outputs from
+the net already look much better than they looked before on 10th epoch.
+
+So far `TrivialAugument` has 3 different operations: rotate, translate and scale.
+I also want to add a smooth deformation operation but I want it to use only operations from
+tinygrad so that we won't need to perform costly conversions from Pillow Image data type to
+Tensor and back. It would be great if in the future we'd be able to eliminate Pillow from
+the stack completely. Pillow's operations are not GPU accelerated and therefore they
+are somewhat slow. The biggest problem with Pillow though is that the conversion to numpy
+array and then to Tensor is incredibly slow.
+
+I decided to always keep two versions of a given image in the `TrivialAugument` object:
+the original `Tensor` loaded from file and the Pillow image loaded from array.
+Also every transformation function will take in both: the tensor and image.
+Since some transforms will take in tensors and some will take images, all of
+them will return tuples with one empty position depending on which datatype they operate on.
+After all transformations will be performed a function will run over all transformed
+images and convert the ones that need to be converted to tensors.
 
 # 2026-03-15
 
@@ -203,3 +224,11 @@ This is how outputs on the validation dataset look like:
 
 And this is how they look like on the training set:
 ![net output on the training set](./readme-data/trivialaugument_from_training_set.png)
+
+# 2026-03-17
+
+Plan for today
+- [x] Create a script that runs every transform from `TrivialAugument` on a single chosen input image (and arranges all transform outputs on a grid);
+- [ ] Make it so that the TrivialTransform keeps a copy of the dataset in Tensor form so that it can be used for deformations written purely in tinygrad;
+- [ ] Add a smooth deformation transform;
+- [ ] Run training with smooth deformation enabled.
