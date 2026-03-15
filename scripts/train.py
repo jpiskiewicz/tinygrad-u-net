@@ -101,10 +101,10 @@ def choose_preview_image() -> str | None:
     
 
 def get_latest_dataset(i: int) -> str:
-  if i == 0: return TRAIN_DATASET
+  if i == 1: return TRAIN_DATASET
   augumented_datasets = glob.glob(f"{TRAIN_DATASET.split('.')[0]}_*.safetensors")
   if len(augumented_datasets) == 0: return TRAIN_DATASET
-  return sorted(augumented_datasets, key=lambda x: int(re.search(r'_(\d+)', x).group(1)))[:i][-1]
+  return sorted(augumented_datasets, key=lambda x: int(re.search(r'_(\d+)', x).group(1)))[:i-1][-1]
     
 
 def load_augumented_dataset(i: int) -> list[Tensor]:
