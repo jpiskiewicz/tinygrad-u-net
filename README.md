@@ -185,3 +185,21 @@ artificially increase the amount of examples. I think that this is the easiest w
 some generalization. Then we could also try using Focal loss instead of Tversky because
 now that the net is actually being properly trained. I want to know whether Focal can
 actually get us any advantage vs Tversky on the hard examples.
+
+
+# 2026-03-15
+
+Plan for today
+- [ ] Create a script that runs every transform from `TrivialAugument` on a single chosen input image (and arranges all transform outputs on a grid);
+- [ ] Make it so that the TrivialTransform keeps a copy of the dataset in Tensor form so that it can be used for deformations written purely in tinygrad;
+- [ ] Add a smooth deformation transform;
+- [ ] Run training with smooth deformation enabled.
+
+Notes
+I've checked the output of the previous training run which was the first one that used `TrivialAugument`. It looks way better than previously and it is clearly visible that adding random transform helps with  generalization.
+
+This is how outputs on the validation dataset look like:
+![net output on the validation set](./readme-data/trivialaugument_from_validation_set.png)
+
+And this is how they look like on the training set:
+![net output on the training set](./readme-data/trivialaugument_from_training_set.png)
