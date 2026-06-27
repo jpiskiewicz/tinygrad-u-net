@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 
-from tinygrad_unet.dataset import TRAIN_DATASET, VAL_DATASET, choose_files, Dataset
-
-PATTERNS = [
-    "dataset/benign/*(*).png",
-    "dataset/malignant/*(*).png",
-    "dataset/normal/*(*).png"
-]
+from tinygrad_unet.dataset import SOURCE_PATTERNS, TRAIN_DATASET, VAL_DATASET, choose_files, Dataset
 
 if __name__ == "__main__":
-   train, val = choose_files(PATTERNS)
+   train, val = choose_files(SOURCE_PATTERNS)
    print("Generating datasets from files:")
    print("Generating training dataset...")
    Dataset(train).save(TRAIN_DATASET)
