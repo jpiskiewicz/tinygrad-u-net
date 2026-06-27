@@ -11,7 +11,8 @@ from random import shuffle, choice, random
 from PIL import Image, ImageFilter
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
-from typing import Callable
+from abc import ABC, abstractmethod
+from typing import override
 import math
 
 
@@ -21,6 +22,12 @@ SIZE = 240
 TRAIN_DATASET = "compiled_datasets/train/train_dataset.safetensors"
 VAL_DATASET = "compiled_datasets/train/val_dataset.safetensors"
 FILTER = ImageFilter.MedianFilter(size=21)
+SOURCE_PATTERNS = [
+    "dataset/benign/*(*).png",
+    "dataset/malignant/*(*).png",
+    "dataset/normal/*(*).png"
+]
+
 
 
 def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to("AMD") for x in loaded.values()]
@@ -38,8 +45,8 @@ def choose_files(patterns):
   with open("training_files.json", "w") as f: json.dump(train, f, indent=2)
   with open("validation_files.json", "w") as f: json.dump(val, f, indent=2)
   return train, val
-  
-  
+
+
 def load_image(p: str) -> Image.Image: return Image.open(p).convert("L")
 
 
@@ -47,8 +54,8 @@ def make_array(im: Image.Image) -> np.typing.NDArray: return np.array(im, np.flo
 
 
 def load_image_and_apply_filter(p: str) -> np.typing.NDArray: return make_array(load_image(p))
-  
-  
+
+
 def transform_image(p: np.typing.NDArray) -> Tensor:
   im = Tensor(p) / 255 # Normalize
   # Resize the Image to exactly INPUT_SIZE and add mirror padding if the other dimension is < INPUT_SIZE
@@ -57,14 +64,14 @@ def transform_image(p: np.typing.NDArray) -> Tensor:
   padding = [(SIZE - x) // 2 for x in desired_size]
   im = im.interpolate(desired_size).pad((padding[1] + desired_size[1] % 2, padding[1], padding[0] + desired_size[0] % 2, padding[0]), mode = "reflect").expand(1, 1, -1, -1)
   return im
-  
-  
+
+
 def load_mask(p: list[np.typing.NDArray]) -> Tensor:
   masks = [transform_image(x) for x in p]
   combined = masks[0]
   for mask in masks[1:]: combined += mask
   return combined
-  
+
 
 def get_masks(p: str) -> list[str]: return glob.glob(p + "_mask*.png")
 
@@ -76,22 +83,128 @@ class Dataset:
       images = tqdm(executor.map(load_image_and_apply_filter, image_files), desc="Loading images", total=len(image_files))
       labels = tqdm(executor.map(self.load_multiple, label_files), desc="Loading labels", total=len(label_files))
     self.images, self.labels = self.load_images(images), self.load_masks(labels)
-  
+
   def load_multiple(self, paths: list[str]) -> list[np.typing.NDArray]: return [make_array(load_image(x)) for x in paths]
-  
+
   def load_images(self, images: list[np.typing.NDArray]) -> Tensor: return self.combine([transform_image(x) for x in images])
-  
+
   def load_masks(self, files: list[list[np.typing.NDArray]]) -> Tensor: return self.combine([load_mask(x) for x in files])
 
   # TODO: Jitting this makes it crash in the latest tinygrad. We can uncomment this once this gets fixed. 
   # @TinyJit
   def combine(self, slices: list[Tensor]) -> Tensor: return slices[0].stack(*slices[1:]).realize()
-  
+
   def save(self, filename: str): safe_save({ "images": self.images, "labels": self.labels }, filename)
+
+
+class Transform[T](ABC):
+  def __init__(self, strength: float):
+    self.strength: float = strength
+
+  @abstractmethod
+  def apply(self, image: T) -> T: pass
+
+
+class ImageTransform(Transform[Image.Image], ABC):
+  @override
+  @abstractmethod
+  def apply(self, image: Image.Image) -> Image.Image: pass
+
+
+class TensorTransform(Transform[Tensor], ABC):
+  @override
+  @abstractmethod
+  def apply(self, image: Tensor) -> Tensor: pass
+
+
+class Rotate(ImageTransform):
+  @override
+  def apply(self, image: Image.Image) -> Image.Image:
+    angle = self.strength * 45
+    # Original dimensions
+    w, h = image.size
+    
+    # Convert angle to radians for math functions
+    angle_rad = math.radians(angle)
+    
+    # Compute the expanded bounding box size after rotation (for the canvas)
+    cos_a = abs(math.cos(angle_rad))
+    sin_a = abs(math.sin(angle_rad))
+    new_w = int(math.ceil(w * cos_a + h * sin_a))
+    new_h = int(math.ceil(w * sin_a + h * cos_a))
+    
+    # Perform the rotation with expansion (transparent fill for corners)
+    rotated = image.rotate(angle, resample=Image.BICUBIC, expand=True)
+    
+    width_is_longer = w >= h
+    side_long, side_short = (w, h) if width_is_longer else (h, w)
+    
+    sin_a_val, cos_a_val = abs(math.sin(angle_rad)), abs(math.cos(angle_rad))
+    
+    if side_short <= 2.0 * sin_a_val * cos_a_val * side_long or abs(sin_a_val - cos_a_val) < 1e-10:
+        # Half-constrained: two crop corners touch the longer side
+        x = 0.5 * side_short
+        wr, hr = (x / sin_a_val, x / cos_a_val) if width_is_longer else (x / cos_a_val, x / sin_a_val)
+    else:
+        # Fully-constrained: crop touches all 4 sides
+        cos_2a = cos_a_val * cos_a_val - sin_a_val * sin_a_val
+        wr = (w * cos_a_val - h * sin_a_val) / cos_2a
+        hr = (h * cos_a_val - w * sin_a_val) / cos_2a
+
+    # Ensure positive dimensions and round to int
+    wr = max(0, int(math.floor(wr)))
+    hr = max(0, int(math.floor(hr)))
+
+    # Crop from the center of the rotated image
+    left = (new_w - wr) // 2
+    top = (new_h - hr) // 2
+    right = left + wr
+    bottom = top + hr
+
+    cropped = rotated.crop((left, top, right, bottom))
+
+    return cropped
+
+
+class Zoom(ImageTransform):
+  @override
+  def apply(self, image: Image.Image) -> Image.Image:
+    # TODO: Maybe add support for zooming out and reflect?
+    crop = SIZE * self.strength * 0.25
+    border = crop // 2
+    return image.crop((border, border, SIZE - border, SIZE - border))
   
   
-type Transform = Callable[[Image.Image], Image.Image]
-  
+class Translate(ImageTransform):
+  @override
+  def apply(self, image: Image.Image) -> Image.Image:
+    size = image.size[0]          # since square → width = height
+    max_shift = size * 0.25     # 25% of side length
+
+    # Angle: 0° = right, 90° = down, 180° = left, 270° = up
+    angle_deg = self.strength * 360
+    angle_rad = math.radians(angle_deg)
+
+    # Displacement vector (positive = content moves in that direction)
+    dx = math.cos(angle_rad) * max_shift   # x: positive = right
+    dy = math.sin(angle_rad) * max_shift   # y: positive = down
+
+    # Crop amounts (we crop opposite to movement direction)
+    left   = max(0,  dx)     # crop left   when moving content right
+    right  = max(0, -dx)     # crop right  when moving content left
+    top    = max(0,  dy)     # crop top    when moving content down
+    bottom = max(0, -dy)     # crop bottom when moving content up
+
+    # Create crop box (all values are safe since max_shift = 0.25×size)
+    crop_box = (
+        int(left),           # left
+        int(top),            # top
+        int(size - right),   # right
+        int(size - bottom)   # bottom
+    )
+    return image.crop(crop_box)
+
+
 class TrivialAugument:
   """
   This class is to be used in a separate script than the one that contains the training routine.
@@ -100,114 +213,28 @@ class TrivialAugument:
   The whole thing is to run in a separate thread so that it doesn't slow down the training process.
   """
   def __init__(self, dataset: list[Tensor]):
-    # Convert tensors to PIL images,
-    self.images, self.labels = [Image.fromarray(make_8bit(x)) for x in dataset[0]], [Image.fromarray(make_8bit(x)) for x in dataset[1]]
-    self.transformations = [self.rotate, self.zoom, self.translate]
-   
-  def rotate(self, s: float) -> Transform:
-      print(f"rotate({s})")
-      def f(img: Image.Image) -> Image.Image:
-        angle = s * 45
-        # Original dimensions
-        w, h = img.size
-        
-        # Convert angle to radians for math functions
-        angle_rad = math.radians(angle)
-        
-        # Compute the expanded bounding box size after rotation (for the canvas)
-        cos_a = abs(math.cos(angle_rad))
-        sin_a = abs(math.sin(angle_rad))
-        new_w = int(math.ceil(w * cos_a + h * sin_a))
-        new_h = int(math.ceil(w * sin_a + h * cos_a))
-        
-        # Perform the rotation with expansion (transparent fill for corners)
-        rotated = img.rotate(angle, resample=Image.BICUBIC, expand=True)
-        
-        width_is_longer = w >= h
-        side_long, side_short = (w, h) if width_is_longer else (h, w)
-        
-        sin_a_val, cos_a_val = abs(math.sin(angle_rad)), abs(math.cos(angle_rad))
-        
-        if side_short <= 2.0 * sin_a_val * cos_a_val * side_long or abs(sin_a_val - cos_a_val) < 1e-10:
-            # Half-constrained: two crop corners touch the longer side
-            x = 0.5 * side_short
-            wr, hr = (x / sin_a_val, x / cos_a_val) if width_is_longer else (x / cos_a_val, x / sin_a_val)
-        else:
-            # Fully-constrained: crop touches all 4 sides
-            cos_2a = cos_a_val * cos_a_val - sin_a_val * sin_a_val
-            wr = (w * cos_a_val - h * sin_a_val) / cos_2a
-            hr = (h * cos_a_val - w * sin_a_val) / cos_2a
-        
-        # Ensure positive dimensions and round to int
-        wr = max(0, int(math.floor(wr)))
-        hr = max(0, int(math.floor(hr)))
-        
-        # Crop from the center of the rotated image
-        left = (new_w - wr) // 2
-        top = (new_h - hr) // 2
-        right = left + wr
-        bottom = top + hr
-        
-        cropped = rotated.crop((left, top, right, bottom))
-        
-        return cropped
-      return f
-    
-  def zoom(self, s: float) -> Transform:
-    print(f"zoom({s})")
-    def f(img: Image.Image) -> Image.Image:
-      # TODO: Maybe add support for zooming out and reflect?
-      crop = SIZE * s * 0.25
-      border = crop // 2
-      return img.crop((border, border, SIZE - border, SIZE - border))
-    return f
-    
-  def translate(self, s: float) -> Transform:
-    print(f"translate({s})")
-    def f(img: Image.Image) -> Image.Image:
-      size = img.size[0]          # since square → width = height
-      max_shift = size * 0.25     # 25% of side length
-  
-      # Angle: 0° = right, 90° = down, 180° = left, 270° = up
-      angle_deg = s * 360
-      angle_rad = math.radians(angle_deg)
-  
-      # Displacement vector (positive = content moves in that direction)
-      dx = math.cos(angle_rad) * max_shift   # x: positive = right
-      dy = math.sin(angle_rad) * max_shift   # y: positive = down
-  
-      # Crop amounts (we crop opposite to movement direction)
-      left   = max(0,  dx)     # crop left   when moving content right
-      right  = max(0, -dx)     # crop right  when moving content left
-      top    = max(0,  dy)     # crop top    when moving content down
-      bottom = max(0, -dy)     # crop bottom when moving content up
-  
-      # Create crop box (all values are safe since max_shift = 0.25×size)
-      crop_box = (
-          int(left),           # left
-          int(top),            # top
-          int(size - right),   # right
-          int(size - bottom)   # bottom
-      )
-      return img.crop(crop_box)
-    return f
-    
-  # def elastic_deformation(self, img: Image.Image, s: float) -> Image.Image:
-  #   pass
-    
-  def apply(self, img: Image.Image, transform: Transform) -> Tensor: return (Tensor(make_array(transform(img))) / 255).interpolate((SIZE, SIZE), "nearest-exact").expand(1, 1, -1, -1)
-  
-  def run_transform(self, image: Image.Image, label: Image.Image) -> tuple[Tensor, Tensor]:
+    # Convert tensors to PIL images
+    self.image_tensors, self.label_tensors = dataset[0], dataset[1]
+    self.images, self.labels = [Image.fromarray(make_8bit(x)) for x in self.image_tensors], [Image.fromarray(make_8bit(x)) for x in self.label_tensors]
+    self.transformations = [Rotate, Zoom, Translate]
+
+  def post_apply(self, img: Tensor) -> Tensor: return img.interpolate((SIZE, SIZE), "nearest-exact").expand(1, 1, -1, -1)
+
+  def apply_image(self, img: Image.Image, transform: ImageTransform) -> Tensor: return self.post_apply(Tensor(make_array(transform.apply(img))) / 255)
+
+  def apply_tensor(self, img: Tensor, transform: TensorTransform) -> Tensor: return self.post_apply(transform.apply(img))
+
+  def run_transform(self, i: int) -> tuple[Tensor, Tensor]:
     transform = choice(self.transformations)(random())
-    return self.apply(image, transform), self.apply(label, transform)
-    
+    if isinstance(transform, ImageTransform): return self.apply_image(self.images[i], transform), self.apply_image(self.labels[i], transform)
+    return self.apply_tensor(self.image_tensors[i], transform), self.apply_tensor(self.label_tensors[i], transform)
+
   def augument(self) -> list[Tensor]:
     print("Performing TrivialAugument on the dataset...")
     images: list[Tensor] = []
     labels: list[Tensor] = []
     for i in range(len(self.images)):
-      image, label = self.run_transform(self.images[i], self.labels[i])
+      image, label = self.run_transform(i)
       images.append(image)
       labels.append(label)
     return [images[0].stack(*images[1:]).realize(), labels[0].stack(*labels[1:]).realize()]
-  
