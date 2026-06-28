@@ -12,9 +12,12 @@ packages = [
     "tinygrad_unet.dataset",
     "tinygrad_unet.net",
     "tinygrad_unet.inference",
-    "tinygrad_unet.util"
+    "tinygrad_unet.util",
+    "scripts"
 ]
 
 [tool.pyright]
 extraPaths = ["tinygrad"]
-# typeCheckingMode = "basic"  # Less strict for dynamic tinygrad
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

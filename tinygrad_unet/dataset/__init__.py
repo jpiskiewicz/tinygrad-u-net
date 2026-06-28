@@ -12,7 +12,7 @@ from PIL import Image, ImageFilter
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from abc import ABC, abstractmethod
-from typing import override
+from typing import Callable, override
 import math
 
 
@@ -29,8 +29,7 @@ SOURCE_PATTERNS = [
 ]
 
 
-
-def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to("AMD") for x in loaded.values()]
+def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to("AMD").realize() for x in loaded.values()]
 def load_dataset(filename: str) -> list[Tensor]: return convert_to_device(safe_load(filename))
 
 
@@ -212,11 +211,12 @@ class TrivialAugument:
   saved in new .safetensors files which then will be ingested by the training routine.
   The whole thing is to run in a separate thread so that it doesn't slow down the training process.
   """
-  def __init__(self, dataset: list[Tensor]):
+  def __init__(self, dataset: list[Tensor], transform_strength: Callable[[], float] = random):
     # Convert tensors to PIL images
     self.image_tensors, self.label_tensors = dataset[0], dataset[1]
     self.images, self.labels = [Image.fromarray(make_8bit(x)) for x in self.image_tensors], [Image.fromarray(make_8bit(x)) for x in self.label_tensors]
     self.transformations = [Rotate, Zoom, Translate]
+    self.transform_strength = transform_strength
 
   def post_apply(self, img: Tensor) -> Tensor: return img.interpolate((SIZE, SIZE), "nearest-exact").expand(1, 1, -1, -1)
 
@@ -224,8 +224,7 @@ class TrivialAugument:
 
   def apply_tensor(self, img: Tensor, transform: TensorTransform) -> Tensor: return self.post_apply(transform.apply(img))
 
-  def run_transform(self, i: int) -> tuple[Tensor, Tensor]:
-    transform = choice(self.transformations)(random())
+  def run_transform(self, i: int, transform: ImageTransform | TensorTransform) -> tuple[Tensor, Tensor]:
     if isinstance(transform, ImageTransform): return self.apply_image(self.images[i], transform), self.apply_image(self.labels[i], transform)
     return self.apply_tensor(self.image_tensors[i], transform), self.apply_tensor(self.label_tensors[i], transform)
 
@@ -234,7 +233,8 @@ class TrivialAugument:
     images: list[Tensor] = []
     labels: list[Tensor] = []
     for i in range(len(self.images)):
-      image, label = self.run_transform(i)
+      transform = choice(self.transformations)(self.transform_strength())
+      image, label = self.run_transform(i, transform)
       images.append(image)
       labels.append(label)
     return [images[0].stack(*images[1:]).realize(), labels[0].stack(*labels[1:]).realize()]
