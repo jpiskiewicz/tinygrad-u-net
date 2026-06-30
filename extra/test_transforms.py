@@ -6,13 +6,14 @@ from tinygrad_unet.util import make_8bit
 from tinygrad.tensor import Tensor
 from PIL import Image, ImageDraw, ImageFont
 from typing import override
+from pathlib import Path
 import argparse
 
 
 PADDING_TOP = 32
 GRID_GAP = 4
 COLS = 4
-FONT = ImageFont.truetype("fonts/noto.ttf", size=16)
+FONT = ImageFont.truetype(Path(__file__).resolve().parent / "fonts/noto.ttf", size=16)
 
 
 def arrange_on_grid(images: list[Image.Image], titles: list[str], output: str):
