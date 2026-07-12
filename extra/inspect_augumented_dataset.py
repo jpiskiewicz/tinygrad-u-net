@@ -12,7 +12,6 @@ from PIL import Image, ImageDraw
 from tinygrad_unet.dataset import load_dataset
 from test_transforms import convert_to_image, GRID_GAP, PADDING_TOP, FONT
 from glob import glob
-import os
 
 
 type Datapoint = tuple[Image.Image, Image.Image]
