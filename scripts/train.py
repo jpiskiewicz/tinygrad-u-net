@@ -4,7 +4,7 @@ from tinygrad.tensor import Tensor
 from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.optim import Adam, Optimizer
 from tinygrad.nn.state import get_parameters, load_state_dict, safe_load, safe_save, get_state_dict
-from tinygrad.helpers import tqdm
+from tinygrad.helpers import tqdm, Context
 from tinygrad_unet.net import UNet
 from tinygrad_unet.dataset import TRAIN_DATASET, VAL_DATASET, load_dataset
 from tinygrad_unet.inference import load_combined_mask, infer_and_overlap
@@ -34,7 +34,7 @@ def validate(model: UNet, dataset: list[Tensor]) -> float:
         smooth = 1e-6
         return (2.0 * (probs * label).sum() + smooth) / (probs.sum() + label.sum() + smooth)
       
-    with Tensor.train(False):
+    with Context(TRAINING=0):
       for idx in tqdm(range(l), desc="Validating"): total_dice += f(idx).numpy()
       
     return total_dice / l
@@ -81,7 +81,7 @@ def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> flo
     indices = list(range(l))
     shuffle(indices)
 
-    with Tensor.train(True):
+    with Context(TRAINING=1):
       for i in tqdm(indices, desc="Training"):
         example, label = dataset[0][i].contiguous(), dataset[1][i].contiguous()
         loss = tiny_step(example, label, model, optimizer)
@@ -100,20 +100,20 @@ def choose_preview_image() -> str | None:
     return None
     
 
-def get_latest_dataset(i: int) -> str:
-  if i == 1: return TRAIN_DATASET
-  augumented_datasets = glob.glob(f"{TRAIN_DATASET.split('.')[0]}_*.safetensors")
-  if len(augumented_datasets) == 0: return TRAIN_DATASET
+def get_latest_dataset(i: int, dataset_location: str) -> str:
+  if i == 1: return dataset_location
+  augumented_datasets = glob.glob(f"{dataset_location.split('.')[0]}_*.safetensors")
+  if len(augumented_datasets) == 0: return dataset_location
   return sorted(augumented_datasets, key=lambda x: int(re.search(r'_(\d+)', x).group(1)))[:i-1][-1]
     
 
-def load_augumented_dataset(i: int) -> list[Tensor]:
-  dataset_file = get_latest_dataset(i)
+def load_augumented_dataset(i: int, dataset_location: str) -> list[Tensor]:
+  dataset_file = get_latest_dataset(i, dataset_location)
   print(f'For this epoch using the dataset from "{dataset_file}".')
   return load_dataset(dataset_file)
     
 
-def run_training(val: list[Tensor], epochs: int, model_file: str | None):
+def run_training(val: list[Tensor], epochs: int, model_file: str | None, pred_basedir: str = "predictions", dataset_location: str = TRAIN_DATASET):
   model = UNet()
   if model_file:
     state = safe_load(model_file)  # Load model checkpoint
@@ -129,7 +129,7 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None):
   for i in range(1 if model_file is None else int(model_file.split("_")[2][:-12]), epochs+1):
     epoch_msg = f"\nEpoch {i}/{epochs}"
     print(epoch_msg)
-    train = load_augumented_dataset(i)
+    train = load_augumented_dataset(i, dataset_location)
     train_loss = train_epoch(model, train, optim)
     train_loss_msg = f"Train Loss: {train_loss:.6f}"
     print(train_loss_msg)
@@ -138,7 +138,7 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None):
     print(val_msg)
     with open("eval_scores.txt", "a") as f: f.write(val_msg)
     if i % 10 == 0:
-        with Tensor.train(False): infer_and_overlap(model, preview_image, "training_validation", i)
+        with Context(TRAINING=0): infer_and_overlap(model, preview_image, pred_basedir + "/training_validation", i)
     if i % 20 == 0:
         print("Saving the model...")
         p = Path(f"models/{datetime.now().strftime('%d-%m-%Y')}/model_epoch_{i}.safetensors")
@@ -149,7 +149,7 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None):
         print("This is the best DICE so far!!!")
         largest_dice = dice
         if SAVE_BEST_DICE_PREDICTION:
-            with Tensor.train(False): infer_and_overlap(model, preview_image, "best_dice", i)
+            with Context(TRAINING=0): infer_and_overlap(model, preview_image, pred_basedir + "/best_dice", i)
         
 
 if __name__ == "__main__":
