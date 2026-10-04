@@ -21,6 +21,7 @@ KERNEL_SIZE = 3
 SD = 10
 SIZE = 240
 
+SHARED_KERNEL = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=SD)
 
 def make_dotted_image(width: int, height: int) -> Tensor:
     col_numbers = Tensor.arange(1, width + 1).repeat(height).reshape(width, height)
@@ -35,7 +36,7 @@ def deform_opencv(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     height, width = image.shape
 
     # Create displacement vectors
-    dx, dy = [numpy.random.normal(0, SD, (KERNEL_SIZE, KERNEL_SIZE)) for _ in range(2)]
+    dx, dy = SHARED_KERNEL[:, :, 0].numpy(), SHARED_KERNEL[:, :, 1].numpy()
 
     # Create fine meshgrid for the image
     x_fine, y_fine = numpy.meshgrid(numpy.arange(width), numpy.arange(height))
@@ -143,16 +144,16 @@ def remap_bicubic(image: Tensor, xs: Tensor, ys: Tensor) -> Tensor:
 
     def sample(ox: int, oy: int) -> Tensor: return image[x0 + ox, y0 + oy]
 
-    row0 = sample(-1, -1) * wxs[0] + sample(-1, 0) * wxs[1] + sample(-1, 1) * wxs[2] + sample(-1, 2) * wxs[3]
-    row1 = sample(0, -1) * wxs[0] + sample(0, 0) * wxs[1] + sample(0, 1) * wxs[2] + sample(0, 2) * wxs[3]
-    row2 = sample(1, -1) * wxs[0] + sample(1, 0) * wxs[1] + sample(1, 1) * wxs[2] + sample(1, 2) * wxs[3]
-    row3 = sample(2, -1) * wxs[0] + sample(2, 0) * wxs[1] + sample(2, 1) * wxs[2] + sample(2, 2) * wxs[3]
+    row0 = sample(-1, -1) * wxs[0] + sample(0, -1) * wxs[1] + sample(1, -1) * wxs[2] + sample(2, -1) * wxs[3]
+    row1 = sample(-1, 0) * wxs[0] + sample(0, 0) * wxs[1] + sample(1, 0) * wxs[2] + sample(2, 0) * wxs[3]
+    row2 = sample(-1, 1) * wxs[0] + sample(0, 1) * wxs[1] + sample(1, 1) * wxs[2] + sample(2, 1) * wxs[3]
+    row3 = sample(-1, 2) * wxs[0] + sample(0, 2) * wxs[1] + sample(1, 2) * wxs[2] + sample(2, 2) * wxs[3]
 
     return (row0 * wys[0] + row1 * wys[1] + row2 * wys[2] + row3 * wys[3]).reshape(1, 1, *image.shape)
 
 
 def deform_tiny(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
-    kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=SD)
+    kernel = SHARED_KERNEL
     shift_map = kernel_upscale(kernel, image.shape)
     # TODO)) Think about whether it would be better (for the NB remapping here and bicubic remapping later on)
     # to move the last dimension of the coordinate shift map to the front.
