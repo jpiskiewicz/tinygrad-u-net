@@ -25,7 +25,7 @@ class TestTrain(unittest.TestCase):
   TRAIN_DATASET_LOCATION = f"{DATASET_DIR}/train_dataset.safetensors"
   VAL_DATASET_LOCATION = f"{DATASET_DIR}/val_dataset.safetensors"
   TRAIN_DATASET_TENSOR_SHAPE = (10, 1, 1, 240, 240)
-  
+
   def test_dataset(self):
     train, val = choose_files(SOURCE_PATTERNS)
     train = train[:10]
@@ -39,7 +39,7 @@ class TestTrain(unittest.TestCase):
     VAL_DATASET_TENSOR_SHAPE = (1, 1, 1, 240, 240)
     self.assertEqual(val_images.shape, VAL_DATASET_TENSOR_SHAPE)
     self.assertEqual(val_labels.shape, VAL_DATASET_TENSOR_SHAPE)
-    
+
   def test_augument(self):
     dataset = TrivialAugument(load_dataset(self.TRAIN_DATASET_LOCATION))
     images_augumented, labels_augumented = dataset.augument()
@@ -48,16 +48,15 @@ class TestTrain(unittest.TestCase):
     loaded_images, loaded_labels = load_dataset(augumented_location)
     self.assertEqual(loaded_images.shape, self.TRAIN_DATASET_TENSOR_SHAPE)
     self.assertEqual(loaded_labels.shape, self.TRAIN_DATASET_TENSOR_SHAPE)
-    
+
   def test_train(self):
     # This test isn't opinionated in any way. It just checks whether the training routine goes through without crashing.
     run_training(load_dataset(self.VAL_DATASET_LOCATION), 2, None, str(TESTFILE_DIR / "predictions"), self.TRAIN_DATASET_LOCATION)
-    
-    
+
+
 def ordering_in_test_case(name: str) -> int: return list(TestTrain.__dict__).index(name)
-    
+
 if __name__ == "__main__":
-  # Clean the directory with
   for path in DATASET_DIR.iterdir():
     if path.is_dir(): shutil.rmtree(path)
     else: path.unlink()

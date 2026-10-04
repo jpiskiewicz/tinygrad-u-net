@@ -3,10 +3,11 @@
 import numpy as np
 from tinygrad.nn.state import safe_load
 from tinygrad.tensor import Tensor
+from tinygrad import Device
 
 COMPARISON_SETS = ["benign" , "simulated"]
 
-def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to("AMD") for x in loaded.values()]
+def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to(Device.DEFAULT) for x in loaded.values()]
 
 def load_dataset(filename: str) -> list[Tensor]: return convert_to_device(safe_load(filename))
 

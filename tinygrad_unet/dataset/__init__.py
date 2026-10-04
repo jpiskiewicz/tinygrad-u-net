@@ -3,6 +3,7 @@
 import glob
 import json
 # from tinygrad.engine.jit import TinyJit
+from tinygrad import Device
 from tinygrad.nn.state import safe_load, safe_save
 from tinygrad.tensor import Tensor
 from tinygrad.helpers import tqdm
@@ -29,16 +30,16 @@ SOURCE_PATTERNS = [
 ]
 
 
-def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to("AMD").realize() for x in loaded.values()]
+def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to(Device.DEFAULT).realize() for x in loaded.values()]
 def load_dataset(filename: str) -> list[Tensor]: return convert_to_device(safe_load(filename))
 
 
-def choose_files(patterns):
-  validation_size = int(TRAINING_SIZE * VALIDATION_PART)
+def choose_files(patterns, training_size=TRAINING_SIZE, validation_part=VALIDATION_PART):
+  validation_size = int(training_size * validation_part)
   files = [x[:-4] for pattern in patterns for x in glob.glob(pattern)]
   shuffle(files)
-  train = files[:TRAINING_SIZE]
-  val = files[TRAINING_SIZE:TRAINING_SIZE+validation_size]
+  train = files[:training_size]
+  val = files[training_size:training_size+validation_size]
   print(len(train), len(val))
   assert len(train) > 0 and len(val) > 0
   with open("training_files.json", "w") as f: json.dump(train, f, indent=2)
@@ -89,7 +90,7 @@ class Dataset:
 
   def load_masks(self, files: list[list[np.typing.NDArray]]) -> Tensor: return self.combine([load_mask(x) for x in files])
 
-  # TODO: Jitting this makes it crash in the latest tinygrad. We can uncomment this once this gets fixed. 
+  # TODO: Jitting this makes it crash in the latest tinygrad. We can uncomment this once this gets fixed.
   # @TinyJit
   def combine(self, slices: list[Tensor]) -> Tensor: return slices[0].stack(*slices[1:]).realize()
 
@@ -122,24 +123,24 @@ class Rotate(ImageTransform):
     angle = self.strength * 45
     # Original dimensions
     w, h = image.size
-    
+
     # Convert angle to radians for math functions
     angle_rad = math.radians(angle)
-    
+
     # Compute the expanded bounding box size after rotation (for the canvas)
     cos_a = abs(math.cos(angle_rad))
     sin_a = abs(math.sin(angle_rad))
     new_w = int(math.ceil(w * cos_a + h * sin_a))
     new_h = int(math.ceil(w * sin_a + h * cos_a))
-    
+
     # Perform the rotation with expansion (transparent fill for corners)
     rotated = image.rotate(angle, resample=Image.BICUBIC, expand=True)
-    
+
     width_is_longer = w >= h
     side_long, side_short = (w, h) if width_is_longer else (h, w)
-    
+
     sin_a_val, cos_a_val = abs(math.sin(angle_rad)), abs(math.cos(angle_rad))
-    
+
     if side_short <= 2.0 * sin_a_val * cos_a_val * side_long or abs(sin_a_val - cos_a_val) < 1e-10:
         # Half-constrained: two crop corners touch the longer side
         x = 0.5 * side_short
@@ -172,8 +173,8 @@ class Zoom(ImageTransform):
     crop = SIZE * self.strength * 0.25
     border = crop // 2
     return image.crop((border, border, SIZE - border, SIZE - border))
-  
-  
+
+
 class Translate(ImageTransform):
   @override
   def apply(self, image: Image.Image) -> Image.Image:
