@@ -11,13 +11,14 @@ The stages that this script is testing are:
 
 import unittest
 import shutil
-from tinygrad_unet.dataset import SOURCE_PATTERNS, Dataset, TrivialAugument, choose_files, load_dataset
+from tinygrad_unet.dataset import Dataset, TrivialAugument, choose_files, load_dataset
 from scripts.train import run_training
 from tinygrad.nn.state import safe_save
 from typing import final
 from pathlib import Path
 
 TESTFILE_DIR = Path(__file__).resolve().parent
+SOURCE_PATTERNS = [str((TESTFILE_DIR / "data").resolve()) + "/*(*).png"]
 DATASET_DIR = TESTFILE_DIR / "compiled_datasets"
 
 @final
@@ -27,7 +28,7 @@ class TestTrain(unittest.TestCase):
   TRAIN_DATASET_TENSOR_SHAPE = (10, 1, 1, 240, 240)
 
   def test_dataset(self):
-    train, val = choose_files(SOURCE_PATTERNS)
+    train, val = choose_files(SOURCE_PATTERNS, 10, 0.1)
     train = train[:10]
     val = val[:1]
     Dataset(train).save(self.TRAIN_DATASET_LOCATION)
