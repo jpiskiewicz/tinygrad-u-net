@@ -83,7 +83,8 @@ def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> flo
 
     with Context(TRAINING=1):
       for i in tqdm(indices, desc="Training"):
-        example, label = dataset[0][i].contiguous(), dataset[1][i].contiguous()
+        # Using Tensor.clone() before passing the tenors as parameters as per https://github.com/tinygrad/tinygrad/blob/master/tinygrad/engine/jit.py#L91
+        example, label = dataset[0][i].clone(), dataset[1][i].clone()
         loss = tiny_step(example, label, model, optimizer)
         # TODO: Print the gradients here to check whether they are diminishing.
         total_loss += loss.numpy()
