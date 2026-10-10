@@ -36,8 +36,8 @@ def run_inference(net: UNet, filename: str, draw_prediction=prediction_single_co
     return Image.blend(display_im, Image.alpha_composite(original_mask, display_pred).convert("RGB"), 0.5)
 
 
-def infer_and_overlap(net: UNet, filename: str, subdir: str, epoch: int = 0):
-    out_path = Path(path.join("predictions", subdir, f"{path.split(filename)[1]}_{epoch}.png"))
+def infer_and_overlap(net: UNet, filename: str, basedir: str, epoch: int = 0):
+    out_path = Path(path.join(basedir, f"{path.split(filename)[1]}_{epoch}.png"))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     run_inference(net, filename).save(out_path)
     print("Saved prediction at", out_path)
@@ -53,4 +53,4 @@ if __name__ == "__main__":
     if argv[2] == "filelist": 
         with open(argv[3]) as f: dirnames = json.load(f)
     else: dirnames = [argv[3]]
-    for dirname in dirnames: infer_and_overlap(net, dirname, "inference")
+    for dirname in dirnames: infer_and_overlap(net, dirname, "predictions/inference")
