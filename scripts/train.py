@@ -73,20 +73,21 @@ def tiny_step(example: Tensor, label: Tensor, model: UNet, optimizer: Optimizer)
     return loss
 
 
-def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> float:
+def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> Tensor:
     """Train for one epoch"""
-    total_loss = 0.0
+    
+    total_loss = Tensor(0.0)
     l = int(dataset[0].shape[0])
     indices = list(range(l))
     shuffle(indices)
 
-    with Context(TRAINING=1):
+    with Context(TRAINING=1, BEAM=2):
       for i in tqdm(indices, desc="Training"):
         # Using Tensor.clone() before passing the tenors as parameters as per https://github.com/tinygrad/tinygrad/blob/master/tinygrad/engine/jit.py#L91
         example, label = dataset[0][i].clone(), dataset[1][i].clone()
         loss = tiny_step(example, label, model, optimizer)
         # TODO: Print the gradients here to check whether they are diminishing.
-        total_loss += loss.numpy()
+        total_loss += loss
     
     return total_loss / l
 
@@ -131,7 +132,7 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, pred_ba
     print(epoch_msg)
     train = load_augumented_dataset(i, dataset_location)
     train_loss = train_epoch(model, train, optim)
-    train_loss_msg = f"Train Loss: {train_loss:.6f}"
+    train_loss_msg = f"Train Loss: {train_loss.numpy():.6f}"
     print(train_loss_msg)
     dice = validate(model, val)
     val_msg = ", ".join([epoch_msg, train_loss_msg, f"Epoch Validation Dice: {dice:.6f}"])
@@ -139,7 +140,7 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, pred_ba
     with open("eval_scores.txt", "a") as f: f.write(val_msg)
     if i % 10 == 0:
         with Context(TRAINING=0): infer_and_overlap(model, preview_image, pred_basedir + "/training_validation", i)
-    if i % 20 == 0:
+    if i % 10 == 0:
         print("Saving the model...")
         p = Path(f"models/{datetime.now().strftime('%d-%m-%Y')}/model_epoch_{i}.safetensors")
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -156,4 +157,4 @@ if __name__ == "__main__":
   print(f"Loading validation dataset from {VAL_DATASET}...")
   val = load_dataset(VAL_DATASET)
   print("Dataset loaded.")
-  run_training(val, int(argv[1]) if len(argv) == 2 else EPOCHS, argv[2] if len(argv) == 3 else None)
+  run_training(val, int(argv[1]) if len(argv) >= 2 else EPOCHS, argv[2] if len(argv) == 3 else None)
