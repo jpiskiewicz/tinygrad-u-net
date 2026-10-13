@@ -204,6 +204,11 @@ class Translate(ImageTransform):
     
     
 class SmoothDeform(TensorTransform):
+  def __init__(self, strength: float):
+    super().__init__(strength)
+    KERNEL_SIZE = 3
+    self.kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10 * self.strength, dtype=dtypes.float16)
+  
   def source_coords(self, in_size: int, out_size: int) -> Tensor:
       """
       This is a sampling map which pairs the output pixels to source pixels.
@@ -231,17 +236,17 @@ class SmoothDeform(TensorTransform):
           out += samples * weight.reshape(weight_dims).expand(index_dims)
       return out
   
-  def kernel_upscale(self, kernel: Tensor, dimensions: tuple[sint, ...]) -> Tensor:
+  def kernel_upscale(self, dimensions: tuple[sint, ...]) -> Tensor:
     """
     Perform bicubic interpolation on the kernel in order to bring it up to the provided dimensions.
     """
-    x = kernel
+    x = self.kernel
     for i in range(2): # Bicubic convolution is a separable operation
-        src = self.source_coords(int(kernel.shape[i]), int(dimensions[i]))
+        src = self.source_coords(int(self.kernel.shape[i]), int(dimensions[i]))
         base = src.floor().cast(dtypes.int)
         t = src - base
         weight_dims = dimensions[0] if i == 0 else 1, dimensions[1] if i == 1 else 1, 1
-        index_dims = dimensions[0], dimensions[1] if i == 1 else kernel.shape[1], 2
+        index_dims = dimensions[0], dimensions[1] if i == 1 else self.kernel.shape[1], 2
         x = self.bicubic_conv(x, i, base, t, weight_dims, index_dims)
     return x
     
@@ -279,9 +284,7 @@ class SmoothDeform(TensorTransform):
     
   @override
   def apply(self, image: Tensor, is_mask: bool) -> Tensor:
-    KERNEL_SIZE = 3
-    kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10, dtype=dtypes.float16)
-    shift_map = self.kernel_upscale(kernel, image.shape)
+    shift_map = self.kernel_upscale(image.shape)
     shift_map_x = shift_map.gather(2, Tensor(0).repeat(image.shape[0] * image.shape[1]).reshape(*image.shape, 1)).reshape(image.shape)
     shift_map_y = shift_map.gather(2, Tensor(1).repeat(image.shape[0] * image.shape[1]).reshape(*image.shape, 1)).reshape(image.shape)
     xs = Tensor.arange(image.shape[1]).reshape(1, image.shape[1]).expand(image.shape).add(shift_map_x).clip(0, image.shape[1] - 1)
