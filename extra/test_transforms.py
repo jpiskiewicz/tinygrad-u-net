@@ -12,7 +12,7 @@ import argparse
 
 PADDING_TOP = 32
 GRID_GAP = 4
-COLS = 4
+COLS = 5
 FONT = ImageFont.truetype(Path(__file__).resolve().parent / "fonts/noto.ttf", size=16)
 
 
@@ -30,8 +30,8 @@ def arrange_on_grid(images: list[Image.Image], titles: list[str], output: str):
     
   
 class Original(TensorTransform):
-   @override
-   def apply(self, image: Tensor) -> Tensor: return image
+  @override
+  def apply(self, image: Tensor, is_mask: bool) -> Tensor: return image
   
   
 def convert_to_image(tensors: tuple[Tensor, Tensor]) -> tuple[Image.Image, Image.Image]:
