@@ -27,15 +27,14 @@ def validate(model: UNet, dataset: list[Tensor]) -> float:
     l = int(dataset[0].shape[0])
     
     @TinyJit
-    def f(idx: int) -> Tensor:
-        pred = model(dataset[0][idx])
+    def f(example: Tensor, label: Tensor) -> Tensor:
+        pred = model(example)
         probs = pred.sigmoid()
-        label = dataset[1][idx]
         smooth = 1e-6
         return (2.0 * (probs * label).sum() + smooth) / (probs.sum() + label.sum() + smooth)
       
     with Context(TRAINING=0):
-      for idx in tqdm(range(l), desc="Validating"): total_dice += f(idx).numpy()
+      for idx in tqdm(range(l), desc="Validating"): total_dice += f(dataset[0][idx].clone(), dataset[1][idx].clone()).numpy()
       
     return total_dice / l
 
