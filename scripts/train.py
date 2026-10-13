@@ -4,7 +4,7 @@ from tinygrad.tensor import Tensor
 from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.optim import Adam, Optimizer
 from tinygrad.nn.state import get_parameters, load_state_dict, safe_load, safe_save, get_state_dict
-from tinygrad.helpers import tqdm
+from tinygrad.helpers import tqdm, Context
 from tinygrad_unet.net import UNet
 from tinygrad_unet.dataset import TRAIN_DATASET, VAL_DATASET, load_dataset
 from tinygrad_unet.inference import load_combined_mask, infer_and_overlap
@@ -27,15 +27,14 @@ def validate(model: UNet, dataset: list[Tensor]) -> float:
     l = int(dataset[0].shape[0])
     
     @TinyJit
-    def f(idx: int) -> Tensor:
-        pred = model(dataset[0][idx])
+    def f(example: Tensor, label: Tensor) -> Tensor:
+        pred = model(example)
         probs = pred.sigmoid()
-        label = dataset[1][idx]
         smooth = 1e-6
         return (2.0 * (probs * label).sum() + smooth) / (probs.sum() + label.sum() + smooth)
       
-    with Tensor.train(False):
-      for idx in tqdm(range(l), desc="Validating"): total_dice += f(idx).numpy()
+    with Context(TRAINING=0):
+      for idx in tqdm(range(l), desc="Validating"): total_dice += f(dataset[0][idx].clone(), dataset[1][idx].clone()).numpy()
       
     return total_dice / l
 
@@ -74,19 +73,21 @@ def tiny_step(example: Tensor, label: Tensor, model: UNet, optimizer: Optimizer)
     return loss
 
 
-def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> float:
+def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> Tensor:
     """Train for one epoch"""
-    total_loss = 0.0
+    
+    total_loss = Tensor(0.0)
     l = int(dataset[0].shape[0])
     indices = list(range(l))
     shuffle(indices)
 
-    with Tensor.train(True):
+    with Context(TRAINING=1, BEAM=2):
       for i in tqdm(indices, desc="Training"):
-        example, label = dataset[0][i].contiguous(), dataset[1][i].contiguous()
+        # Using Tensor.clone() before passing the tenors as parameters as per https://github.com/tinygrad/tinygrad/blob/master/tinygrad/engine/jit.py#L91
+        example, label = dataset[0][i].clone(), dataset[1][i].clone()
         loss = tiny_step(example, label, model, optimizer)
         # TODO: Print the gradients here to check whether they are diminishing.
-        total_loss += loss.numpy()
+        total_loss += loss
     
     return total_loss / l
 
@@ -100,20 +101,20 @@ def choose_preview_image() -> str | None:
     return None
     
 
-def get_latest_dataset(i: int) -> str:
-  if i == 1: return TRAIN_DATASET
-  augumented_datasets = glob.glob(f"{TRAIN_DATASET.split('.')[0]}_*.safetensors")
-  if len(augumented_datasets) == 0: return TRAIN_DATASET
+def get_latest_dataset(i: int, dataset_location: str) -> str:
+  if i == 1: return dataset_location
+  augumented_datasets = glob.glob(f"{dataset_location.split('.')[0]}_*.safetensors")
+  if len(augumented_datasets) == 0: return dataset_location
   return sorted(augumented_datasets, key=lambda x: int(re.search(r'_(\d+)', x).group(1)))[:i-1][-1]
     
 
-def load_augumented_dataset(i: int) -> list[Tensor]:
-  dataset_file = get_latest_dataset(i)
+def load_augumented_dataset(i: int, dataset_location: str) -> list[Tensor]:
+  dataset_file = get_latest_dataset(i, dataset_location)
   print(f'For this epoch using the dataset from "{dataset_file}".')
   return load_dataset(dataset_file)
     
 
-def run_training(val: list[Tensor], epochs: int, model_file: str | None):
+def run_training(val: list[Tensor], epochs: int, model_file: str | None, pred_basedir: str = "predictions", dataset_location: str = TRAIN_DATASET):
   model = UNet()
   if model_file:
     state = safe_load(model_file)  # Load model checkpoint
@@ -129,17 +130,17 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None):
   for i in range(1 if model_file is None else int(model_file.split("_")[2][:-12]), epochs+1):
     epoch_msg = f"\nEpoch {i}/{epochs}"
     print(epoch_msg)
-    train = load_augumented_dataset(i)
+    train = load_augumented_dataset(i, dataset_location)
     train_loss = train_epoch(model, train, optim)
-    train_loss_msg = f"Train Loss: {train_loss:.6f}"
+    train_loss_msg = f"Train Loss: {train_loss.numpy():.6f}"
     print(train_loss_msg)
     dice = validate(model, val)
     val_msg = ", ".join([epoch_msg, train_loss_msg, f"Epoch Validation Dice: {dice:.6f}"])
     print(val_msg)
     with open("eval_scores.txt", "a") as f: f.write(val_msg)
     if i % 10 == 0:
-        with Tensor.train(False): infer_and_overlap(model, preview_image, "training_validation", i)
-    if i % 20 == 0:
+        with Context(TRAINING=0): infer_and_overlap(model, preview_image, pred_basedir + "/training_validation", i)
+    if i % 10 == 0:
         print("Saving the model...")
         p = Path(f"models/{datetime.now().strftime('%d-%m-%Y')}/model_epoch_{i}.safetensors")
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -149,11 +150,11 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None):
         print("This is the best DICE so far!!!")
         largest_dice = dice
         if SAVE_BEST_DICE_PREDICTION:
-            with Tensor.train(False): infer_and_overlap(model, preview_image, "best_dice", i)
+            with Context(TRAINING=0): infer_and_overlap(model, preview_image, pred_basedir + "/best_dice", i)
         
 
 if __name__ == "__main__":
   print(f"Loading validation dataset from {VAL_DATASET}...")
   val = load_dataset(VAL_DATASET)
   print("Dataset loaded.")
-  run_training(val, int(argv[1]) if len(argv) == 2 else EPOCHS, argv[2] if len(argv) == 3 else None)
+  run_training(val, int(argv[1]) if len(argv) >= 2 else EPOCHS, argv[2] if len(argv) == 3 else None)
