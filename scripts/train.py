@@ -81,7 +81,7 @@ def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> Ten
     indices = list(range(l))
     shuffle(indices)
 
-    with Context(TRAINING=1, BEAM=2):
+    with Context(TRAINING=1):
       for i in tqdm(indices, desc="Training"):
         # Using Tensor.clone() before passing the tenors as parameters as per https://github.com/tinygrad/tinygrad/blob/master/tinygrad/engine/jit.py#L91
         example, label = dataset[0][i].clone(), dataset[1][i].clone()
