@@ -3,6 +3,7 @@
 import json
 import numpy
 from sys import argv
+from pathlib import Path
 from tinygrad.nn.state import load_state_dict, safe_load
 from tinygrad.tensor import Tensor
 from tinygrad.dtype import dtypes
@@ -44,7 +45,7 @@ def arrange_on_grid(images: list[Image.Image], title: str, output: str):
     for i in range(COLS):
         for j in range(rows):
             res.paste(images[i*rows+j], (image_width * i + (GRID_GAP * (i + 1)), PADDING_TOP + (image_height + GRID_GAP) * j))
-    font = ImageFont.truetype("fonts/noto.ttf", size=16)
+    font = ImageFont.truetype(Path(__file__).resolve().parent / "fonts/noto.ttf", size=16)
     ImageDraw.Draw(res).text((grid_width / 2, PADDING_TOP / 2), title, (0, 0, 0), font, "mm")
     res.save(output)
 
@@ -53,6 +54,5 @@ if __name__ == "__main__":
     net = UNet()
     load_state_dict(net, safe_load(argv[1]))
     with open(argv[2]) as f: dirnames = json.load(f)[:30]
-    images = [run_inference(net, "../" + x, prediction_probability_gradient) for x in dirnames]
+    images = [run_inference(net, x, prediction_probability_gradient) for x in dirnames]
     arrange_on_grid(images, argv[3], argv[4])
-
