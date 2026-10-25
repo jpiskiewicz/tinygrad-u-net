@@ -35,7 +35,7 @@ def convert_to_device(loaded: dict[str, Tensor]) -> list[Tensor]: return [x.to(D
 def load_dataset(filename: str) -> list[Tensor]: return convert_to_device(safe_load(filename))
 
 
-def choose_files(patterns, training_size=TRAINING_SIZE, validation_part=VALIDATION_PART):
+def choose_files(patterns:list[str], training_size:int=TRAINING_SIZE, validation_part:float=VALIDATION_PART) -> tuple[list[str], list[str]]:
   validation_size = int(training_size * validation_part)
   files = [x[:-4] for pattern in patterns for x in glob.glob(pattern)]
   shuffle(files)
