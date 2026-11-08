@@ -161,6 +161,7 @@ if __name__ == "__main__":
       This is the training script. This script loads the validation and training datasets from a default location. It expects to use a different compiled dataset for each epoch but can fall back to the dataset for the latest available epoch if dataset for the current epoch is unavailable.
     """
   )
+  argument_parser.add_argument("run_name")
   argument_parser.add_argument("-e", "--epochs", type=int)
   argument_parser.add_argument("-m", "--model-file")
   argument_parser.add_argument("-b", "--beam", type=bool, default=True)
