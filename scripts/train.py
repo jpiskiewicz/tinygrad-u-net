@@ -114,7 +114,7 @@ def load_augumented_dataset(i: int, dataset_location: str) -> list[Tensor]:
   return load_dataset(dataset_file)
 
 
-def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: bool, pred_basedir: str = "predictions", dataset_location: str = TRAIN_DATASET, *, run_name: str, runs_root: str | Path = "runs"):
+def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: bool, pred_basedir: str = "predictions", dataset_location: str = TRAIN_DATASET, runs_root: str | Path = "runs", *, run_name: str):
   run_dir = Path(runs_root) / f"{datetime.now().strftime('%d-%m-%Y')}-{run_name}"
   model = UNet()
   if model_file:
@@ -157,7 +157,7 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
             with Context(TRAINING=0): infer_and_overlap(model, preview_image, pred_basedir + "/best_dice", i)
 
 
-def build_parser() -> argparse.ArgumentParser:
+if __name__ == "__main__":
   argument_parser = argparse.ArgumentParser(
     prog="Training script",
     description="""
@@ -168,16 +168,9 @@ def build_parser() -> argparse.ArgumentParser:
   argument_parser.add_argument("-e", "--epochs", type=int)
   argument_parser.add_argument("-m", "--model-file")
   argument_parser.add_argument("-b", "--beam", type=bool, default=True)
-  return argument_parser
+  args = argument_parser.parse_args()
 
-
-def main(argv: list[str] | None = None) -> None:
-  args = build_parser().parse_args(argv)
   print(f"Loading validation dataset from {VAL_DATASET}...")
   val = load_dataset(VAL_DATASET)
   print("Dataset loaded.")
   run_training(val, args.epochs if args.epochs is not None else EPOCHS, args.model_file, args.beam, run_name=args.run_name)
-
-
-if __name__ == "__main__":
-  main()

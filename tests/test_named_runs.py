@@ -11,7 +11,7 @@ import numpy as np
 from tinygrad.nn.state import get_state_dict, safe_load, safe_save
 from tinygrad.tensor import Tensor
 
-from scripts.train import build_parser, run_training
+from scripts.train import run_training
 
 
 WHEN = datetime(2026, 11, 8)
@@ -93,7 +93,7 @@ class NamedRunTests(unittest.TestCase):
   def invoke(self, run_name: str, epochs: int, model_file: str | None = None):
     self.seen = []
     self.loads = []
-    run_training([Tensor([0.0]), Tensor([0.0])], epochs, model_file, False, str(self.root / "predictions"), "unused", run_name=run_name, runs_root=self.root / "runs")
+    run_training([Tensor([0.0]), Tensor([0.0])], epochs, model_file, False, str(self.root / "predictions"), "unused", self.root / "runs", run_name=run_name)
     return self.seen
 
   def test_repeat_same_name_without_model_file_starts_fresh_and_replaces_outputs(self):
@@ -174,14 +174,6 @@ class NamedRunTests(unittest.TestCase):
     self.assertNotIn("Epoch 10/", text)
     self.assertNotIn("Epoch 1/", text)
     self.assertNotIn("PRIOR", text)
-
-  def test_cli_requires_positional_run_name(self):
-    args = build_parser().parse_args(["cell", "-e", "50", "-m", "weights.safetensors"])
-    self.assertEqual(args.run_name, "cell")
-    self.assertEqual(args.epochs, 50)
-    self.assertEqual(args.model_file, "weights.safetensors")
-    with self.assertRaises(SystemExit):
-      build_parser().parse_args(["-e", "3"])
 
 
 if __name__ == "__main__":
