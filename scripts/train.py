@@ -74,7 +74,7 @@ def tiny_step(example: Tensor, label: Tensor, model: UNet, optimizer: Optimizer)
     return loss
 
 
-def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> Tensor:
+def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer, beam: bool) -> Tensor:
     """Train for one epoch"""
     
     total_loss = Tensor(0.0)
@@ -82,7 +82,7 @@ def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer) -> Ten
     indices = list(range(l))
     shuffle(indices)
 
-    with Context(TRAINING=1, BEAM=2):
+    with Context(TRAINING=1, BEAM=2 if beam else 0):
       for i in tqdm(indices, desc="Training"):
         # Using Tensor.clone() before passing the tenors as parameters as per https://github.com/tinygrad/tinygrad/blob/master/tinygrad/engine/jit.py#L91
         example, label = dataset[0][i].clone(), dataset[1][i].clone()
@@ -115,7 +115,7 @@ def load_augumented_dataset(i: int, dataset_location: str) -> list[Tensor]:
   return load_dataset(dataset_file)
     
 
-def run_training(val: list[Tensor], epochs: int, model_file: str | None, pred_basedir: str = "predictions", dataset_location: str = TRAIN_DATASET):
+def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: bool, pred_basedir: str = "predictions", dataset_location: str = TRAIN_DATASET):
   model = UNet()
   if model_file:
     state = safe_load(model_file)  # Load model checkpoint
@@ -132,7 +132,7 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, pred_ba
     epoch_msg = f"\nEpoch {i}/{epochs}"
     print(epoch_msg)
     train = load_augumented_dataset(i, dataset_location)
-    train_loss = train_epoch(model, train, optim)
+    train_loss = train_epoch(model, train, optim, beam)
     train_loss_msg = f"Train Loss: {train_loss.numpy():.6f}"
     print(train_loss_msg)
     dice = validate(model, val)
@@ -163,9 +163,10 @@ if __name__ == "__main__":
   )
   argument_parser.add_argument("-e", "--epochs", type=int)
   argument_parser.add_argument("-m", "--model-file")
+  argument_parser.add_argument("-b", "--beam", type=bool, default=True)
   args = argument_parser.parse_args()
   
   print(f"Loading validation dataset from {VAL_DATASET}...")
   val = load_dataset(VAL_DATASET)
   print("Dataset loaded.")
-  run_training(val, args.epochs if args.epochs is not None else EPOCHS, args.model_file if args.model_file is not None else None)
+  run_training(val, args.epochs if args.epochs is not None else EPOCHS, args.model_file, args.beam)

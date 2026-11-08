@@ -52,7 +52,7 @@ class TestTrain(unittest.TestCase):
 
   def test_train(self):
     # This test isn't opinionated in any way. It just checks whether the training routine goes through without crashing.
-    run_training(load_dataset(self.VAL_DATASET_LOCATION), 2, None, str(TESTFILE_DIR / "predictions"), self.TRAIN_DATASET_LOCATION)
+    run_training(load_dataset(self.VAL_DATASET_LOCATION), 2, None, False, str(TESTFILE_DIR / "predictions"), self.TRAIN_DATASET_LOCATION)
 
 
 def ordering_in_test_case(name: str) -> int: return list(TestTrain.__dict__).index(name)
