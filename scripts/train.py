@@ -11,7 +11,6 @@ from tinygrad_unet.inference import load_combined_mask, infer_and_overlap
 from datetime import datetime
 from random import shuffle
 from pathlib import Path
-from sys import argv
 import argparse
 import json
 import glob
@@ -113,9 +112,10 @@ def load_augumented_dataset(i: int, dataset_location: str) -> list[Tensor]:
   dataset_file = get_latest_dataset(i, dataset_location)
   print(f'For this epoch using the dataset from "{dataset_file}".')
   return load_dataset(dataset_file)
-    
 
-def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: bool, pred_basedir: str = "predictions", dataset_location: str = TRAIN_DATASET):
+
+def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: bool, run_name: str, pred_basedir: str = "predictions", dataset_location: str = TRAIN_DATASET, runs_root: str | Path = "runs"):
+  run_dir = Path(runs_root) / f"{datetime.now().strftime('%d-%m-%Y')}-{run_name}"
   model = UNet()
   if model_file:
     state = safe_load(model_file)  # Load model checkpoint
@@ -128,7 +128,8 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
     return
   dice = 0
   largest_dice = 0
-  for i in range(1 if model_file is None else int(model_file.split("_")[2][:-12]), epochs+1):
+  start_epoch = 1 if model_file is None else int(Path(model_file).name.split("_")[2][:-12]) + 1
+  for i in range(start_epoch, epochs+1):
     epoch_msg = f"\nEpoch {i}/{epochs}"
     print(epoch_msg)
     train = load_augumented_dataset(i, dataset_location)
@@ -138,12 +139,14 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
     dice = validate(model, val)
     val_msg = ", ".join([epoch_msg, train_loss_msg, f"Epoch Validation Dice: {dice:.6f}"])
     print(val_msg)
-    with open("eval_scores.txt", "a") as f: f.write(val_msg)
+    scores_path = run_dir / "eval_scores.txt"
+    scores_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(scores_path, "w" if i == start_epoch else "a") as f: f.write(val_msg)
     if i % 10 == 0:
         with Context(TRAINING=0): infer_and_overlap(model, preview_image, pred_basedir + "/training_validation", i)
     if i % 10 == 0:
         print("Saving the model...")
-        p = Path(f"models/{datetime.now().strftime('%d-%m-%Y')}/model_epoch_{i}.safetensors")
+        p = run_dir / f"model_epoch_{i}.safetensors"
         p.parent.mkdir(parents=True, exist_ok=True)
         safe_save(get_state_dict(model), str(p))
         print("Saved.")
@@ -152,7 +155,7 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
         largest_dice = dice
         if SAVE_BEST_DICE_PREDICTION:
             with Context(TRAINING=0): infer_and_overlap(model, preview_image, pred_basedir + "/best_dice", i)
-        
+
 
 if __name__ == "__main__":
   argument_parser = argparse.ArgumentParser(
@@ -161,12 +164,13 @@ if __name__ == "__main__":
       This is the training script. This script loads the validation and training datasets from a default location. It expects to use a different compiled dataset for each epoch but can fall back to the dataset for the latest available epoch if dataset for the current epoch is unavailable.
     """
   )
+  argument_parser.add_argument("run_name")
   argument_parser.add_argument("-e", "--epochs", type=int)
   argument_parser.add_argument("-m", "--model-file")
   argument_parser.add_argument("-b", "--beam", type=bool, default=True)
   args = argument_parser.parse_args()
-  
+
   print(f"Loading validation dataset from {VAL_DATASET}...")
   val = load_dataset(VAL_DATASET)
   print("Dataset loaded.")
-  run_training(val, args.epochs if args.epochs is not None else EPOCHS, args.model_file, args.beam)
+  run_training(val, args.epochs if args.epochs is not None else EPOCHS, args.model_file, args.beam, args.run_name)

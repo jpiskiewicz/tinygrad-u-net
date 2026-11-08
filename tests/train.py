@@ -11,6 +11,7 @@ The stages that this script is testing are:
 
 import unittest
 import shutil
+import tempfile
 from tinygrad_unet.dataset import Dataset, TrivialAugument, choose_files, load_dataset
 from scripts.train import run_training
 from tinygrad.nn.state import safe_save
@@ -52,7 +53,8 @@ class TestTrain(unittest.TestCase):
 
   def test_train(self):
     # This test isn't opinionated in any way. It just checks whether the training routine goes through without crashing.
-    run_training(load_dataset(self.VAL_DATASET_LOCATION), 2, None, False, str(TESTFILE_DIR / "predictions"), self.TRAIN_DATASET_LOCATION)
+    with tempfile.TemporaryDirectory() as runs_root:
+      run_training(load_dataset(self.VAL_DATASET_LOCATION), 2, None, False, "smoke", str(TESTFILE_DIR / "predictions"), self.TRAIN_DATASET_LOCATION, runs_root)
 
 
 def ordering_in_test_case(name: str) -> int: return list(TestTrain.__dict__).index(name)
