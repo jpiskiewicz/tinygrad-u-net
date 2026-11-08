@@ -12,6 +12,7 @@ from datetime import datetime
 from random import shuffle
 from pathlib import Path
 from sys import argv
+import argparse
 import json
 import glob
 import re
@@ -154,7 +155,17 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, pred_ba
         
 
 if __name__ == "__main__":
+  argument_parser = argparse.ArgumentParser(
+    prog="Training script",
+    description="""
+      This is the training script. This script loads the validation and training datasets from a default location. It expects to use a different compiled dataset for each epoch but can fall back to the dataset for the latest available epoch if dataset for the current epoch is unavailable.
+    """
+  )
+  argument_parser.add_argument("-e", "--epochs", type=int)
+  argument_parser.add_argument("-m", "--model-file")
+  args = argument_parser.parse_args()
+  
   print(f"Loading validation dataset from {VAL_DATASET}...")
   val = load_dataset(VAL_DATASET)
   print("Dataset loaded.")
-  run_training(val, int(argv[1]) if len(argv) >= 2 else EPOCHS, argv[2] if len(argv) == 3 else None)
+  run_training(val, args.epochs if args.epochs is not None else EPOCHS, args.model_file if args.model_file is not None else None)
