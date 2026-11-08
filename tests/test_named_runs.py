@@ -93,7 +93,7 @@ class NamedRunTests(unittest.TestCase):
   def invoke(self, run_name: str, epochs: int, model_file: str | None = None):
     self.seen = []
     self.loads = []
-    run_training([Tensor([0.0]), Tensor([0.0])], epochs, model_file, False, str(self.root / "predictions"), "unused", self.root / "runs", run_name=run_name)
+    run_training([Tensor([0.0]), Tensor([0.0])], epochs, model_file, False, run_name, str(self.root / "predictions"), "unused", self.root / "runs")
     return self.seen
 
   def test_repeat_same_name_without_model_file_starts_fresh_and_replaces_outputs(self):

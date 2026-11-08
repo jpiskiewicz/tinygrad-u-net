@@ -114,7 +114,7 @@ def load_augumented_dataset(i: int, dataset_location: str) -> list[Tensor]:
   return load_dataset(dataset_file)
 
 
-def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: bool, pred_basedir: str = "predictions", dataset_location: str = TRAIN_DATASET, runs_root: str | Path = "runs", *, run_name: str):
+def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: bool, run_name: str, pred_basedir: str = "predictions", dataset_location: str = TRAIN_DATASET, runs_root: str | Path = "runs"):
   run_dir = Path(runs_root) / f"{datetime.now().strftime('%d-%m-%Y')}-{run_name}"
   model = UNet()
   if model_file:
@@ -173,4 +173,4 @@ if __name__ == "__main__":
   print(f"Loading validation dataset from {VAL_DATASET}...")
   val = load_dataset(VAL_DATASET)
   print("Dataset loaded.")
-  run_training(val, args.epochs if args.epochs is not None else EPOCHS, args.model_file, args.beam, run_name=args.run_name)
+  run_training(val, args.epochs if args.epochs is not None else EPOCHS, args.model_file, args.beam, args.run_name)
