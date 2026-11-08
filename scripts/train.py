@@ -126,13 +126,6 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
   if preview_image is None:
     print("All masks are empty.")
     return
-  if run_dir.is_dir():
-    loaded_path = Path(model_file).resolve() if model_file else None
-    for stale in run_dir.glob("model_epoch_*.safetensors"):
-      if loaded_path is not None and stale.resolve() == loaded_path: continue
-      stale.unlink()
-    score_file = run_dir / "eval_scores.txt"
-    if score_file.is_file(): score_file.unlink()
   dice = 0
   largest_dice = 0
   start_epoch = 1 if model_file is None else int(Path(model_file).name.split("_")[2][:-12]) + 1
@@ -148,7 +141,7 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
     print(val_msg)
     scores_path = run_dir / "eval_scores.txt"
     scores_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(scores_path, "a") as f: f.write(val_msg)
+    with open(scores_path, "w" if i == start_epoch else "a") as f: f.write(val_msg)
     if i % 10 == 0:
         with Context(TRAINING=0): infer_and_overlap(model, preview_image, pred_basedir + "/training_validation", i)
     if i % 10 == 0:

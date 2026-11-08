@@ -121,8 +121,10 @@ class NamedRunTests(unittest.TestCase):
     second = self.invoke("cell", 10)
     self.assertEqual(self.loads, [])
     self.assertEqual(weight_of(second[0]), 0.0)
-    self.assertEqual(sorted(path.name for path in run_dir.glob("model_epoch_*.safetensors")), ["model_epoch_10.safetensors"])
+    self.assertEqual(sorted(path.name for path in run_dir.glob("model_epoch_*.safetensors")), ["model_epoch_10.safetensors", "model_epoch_20.safetensors", "model_epoch_30.safetensors"])
     self.assertEqual(file_weight(run_dir / "model_epoch_10.safetensors"), 10.0)
+    self.assertEqual(file_weight(run_dir / "model_epoch_20.safetensors"), 20.0)
+    self.assertEqual(file_weight(run_dir / "model_epoch_30.safetensors"), 30.0)
     second_scores = (run_dir / "eval_scores.txt").read_text()
     self.assertIn("\nEpoch 1/10", second_scores)
     self.assertIn("\nEpoch 10/10", second_scores)
@@ -149,8 +151,9 @@ class NamedRunTests(unittest.TestCase):
     self.assertNotIn("Epoch 1/", text)
     self.assertNotIn("OLD-SCORES", text)
     self.assertEqual(external.read_bytes(), external_bytes)
-    self.assertEqual(sorted(path.name for path in run_dir.glob("model_epoch_*.safetensors")), ["model_epoch_20.safetensors"])
+    self.assertEqual(sorted(path.name for path in run_dir.glob("model_epoch_*.safetensors")), ["model_epoch_20.safetensors", "model_epoch_40.safetensors"])
     self.assertEqual(file_weight(run_dir / "model_epoch_20.safetensors"), 20.0)
+    self.assertEqual(file_weight(run_dir / "model_epoch_40.safetensors"), 40.0)
 
   def test_model_file_inside_run_dir_is_loaded_before_it_is_replaced(self):
     run_dir = self.root / "runs" / f"{DATE_NAME}-inside"
