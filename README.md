@@ -1,24 +1,3 @@
-# Training runs
-
-`scripts/train.py` takes a positional run name:
-
-```bash
-python3 scripts/train.py my-run -e 50
-python3 scripts/train.py my-run -e 100
-```
-
-The second command, on the same calendar day, loads `my-run`'s latest checkpoint and trains through epoch 100. `--epochs` is the last epoch index, not a number of extra epochs.
-
-Artifacts for an invocation go under `runs/<dd-mm-YYYY>-<run_name>/`. The date uses the previous `%d-%m-%Y` format and is the local date when the invocation starts, so one invocation stays in one directory.
-
-- `model_epoch_<N>.safetensors` is written every 10 epochs.
-- `eval_scores.txt` lives in that directory. A new invocation replaces the file. Scores from the previous invocation are not appended. A global `eval_scores.txt` is no longer written.
-- With no `-m` / `--model-file`, resume looks only in that date's directory and loads the checkpoint with the highest numeric epoch (`model_epoch_10` beats `model_epoch_2`). The same run name on another date is a different directory and is not searched. Nothing under an existing `models/` tree, and no pre-existing global `eval_scores.txt`, is moved or deleted.
-- `-m` / `--model-file` still loads that file and still takes the start epoch from `model_epoch_<N>.safetensors`. That is how a checkpoint from another date, or from an old `models/` path, can be loaded. The file is read before any checkpoint in the current run directory is removed. A checkpoint outside the current run directory is never deleted.
-- The start epoch is `N`, inclusive, through `--epochs`, inclusive. Resuming epoch 50 with `--epochs 100` trains epochs 50 through 100. If `--epochs` is below the resume epoch, no epoch runs and that directory's checkpoints and scores stay as they are.
-- A missing run directory, an empty one, or one with no `model_epoch_*.safetensors` starts at epoch 1. Other files in the directory are left in place. A leftover `eval_scores.txt` without a checkpoint is replaced when the new invocation writes a score.
-- After an invocation saves at least one checkpoint, `model_epoch_*.safetensors` in that run directory that this invocation did not write are removed. A shorter follow-up does not keep the previous invocation's extra checkpoints. If the invocation saves no checkpoint, nothing is deleted.
-
 # Journal
 
 # 2026-01-17
