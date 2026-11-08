@@ -128,8 +128,8 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
     return
   dice = 0
   largest_dice = 0
-  start_epoch = 1 if model_file is None else int(Path(model_file).name.split("_")[2][:-12]) + 1
-  for i in range(start_epoch, epochs+1):
+  score_mode = "w"
+  for i in range(1 if model_file is None else int(Path(model_file).name.split("_")[2][:-12]) + 1, epochs+1):
     epoch_msg = f"\nEpoch {i}/{epochs}"
     print(epoch_msg)
     train = load_augumented_dataset(i, dataset_location)
@@ -141,7 +141,8 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
     print(val_msg)
     scores_path = run_dir / "eval_scores.txt"
     scores_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(scores_path, "w" if i == start_epoch else "a") as f: f.write(val_msg)
+    with open(scores_path, score_mode) as f: f.write(val_msg)
+    score_mode = "a"
     if i % 10 == 0:
         with Context(TRAINING=0): infer_and_overlap(model, preview_image, pred_basedir + "/training_validation", i)
     if i % 10 == 0:
