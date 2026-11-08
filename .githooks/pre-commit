@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+mkdir -p tests/data tests/compiled_datasets
+python3 extra/cell_dataset_generator.py
+python3 tests/train.py

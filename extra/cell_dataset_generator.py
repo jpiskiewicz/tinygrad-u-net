@@ -19,8 +19,8 @@ BACKGROUND_COLOUR = (181, 158, 184)
 FEATURE_RADIUS = 3
 FEATURE_COUNT = 100
 FEATURE_COLOUR = (241, 238, 241)
-DATASET_SIZE = 300
-OUTPUT_DIR = "generated"
+DATASET_SIZE = 11
+OUTPUT_DIR = "tests/data"
 
 
 def draw_features(feature_positions: list[list[int]], color: color, background: color) -> Image.Image:
