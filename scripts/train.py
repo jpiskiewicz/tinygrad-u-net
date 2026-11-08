@@ -120,7 +120,6 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
   if model_file:
     state = safe_load(model_file)  # Load model checkpoint
     load_state_dict(model, state)
-    del state
     print(f"Loaded model from {model_file}.")
   optim = Adam(get_parameters(model), 1e-4)
   preview_image = choose_preview_image()
@@ -128,12 +127,16 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
     print("All masks are empty.")
     return
   if run_dir.is_dir():
-    for stale in run_dir.glob("model_epoch_*.safetensors"): stale.unlink()
+    loaded_path = Path(model_file).resolve() if model_file else None
+    for stale in run_dir.glob("model_epoch_*.safetensors"):
+      if loaded_path is not None and stale.resolve() == loaded_path: continue
+      stale.unlink()
     score_file = run_dir / "eval_scores.txt"
     if score_file.is_file(): score_file.unlink()
   dice = 0
   largest_dice = 0
-  for i in range(1 if model_file is None else int(model_file.split("_")[2][:-12]), epochs+1):
+  start_epoch = 1 if model_file is None else int(Path(model_file).name.split("_")[2][:-12]) + 1
+  for i in range(start_epoch, epochs+1):
     epoch_msg = f"\nEpoch {i}/{epochs}"
     print(epoch_msg)
     train = load_augumented_dataset(i, dataset_location)
