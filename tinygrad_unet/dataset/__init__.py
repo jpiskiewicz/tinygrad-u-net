@@ -2,6 +2,7 @@
 
 import glob
 import json
+import os
 # from tinygrad.engine.jit import TinyJit
 from tinygrad import Device, dtypes
 from tinygrad.nn.state import safe_load, safe_save
@@ -95,7 +96,9 @@ class Dataset:
   # @TinyJit
   def combine(self, slices: list[Tensor]) -> Tensor: return slices[0].stack(*slices[1:]).realize()
 
-  def save(self, filename: str): safe_save({ "images": self.images, "labels": self.labels }, filename)
+  def save(self, filename: str):
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    safe_save({ "images": self.images, "labels": self.labels }, filename)
 
 
 class Transform[T](ABC):
