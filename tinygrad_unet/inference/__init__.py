@@ -14,10 +14,10 @@ import json
 import numpy
 
 
-def load_and_transform(filename: str): return transform_image(load_image_and_apply_filter(filename))
+def load_and_transform(filename: str): return Tensor(transform_image(load_image_and_apply_filter(filename)))
 
 
-def load_combined_mask(filename: str): return load_mask([make_array(load_image(x)) for x in get_masks(filename)])
+def load_combined_mask(filename: str): return Tensor(load_mask([make_array(load_image(x)) for x in get_masks(filename)]))
 
 
 def mask_rgb(mask: Tensor, color: tuple[int, int, int]) -> numpy.ndarray: return (mask.unsqueeze(4).repeat_interleave(4, 4)[0][0] * Tensor(color + (255,))).cast(dtypes.uint8).numpy()
