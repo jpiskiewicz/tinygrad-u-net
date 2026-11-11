@@ -21,7 +21,7 @@ type ImageSet = list[tuple[str, Tensor]]
 
 def get_all_images(path: str) -> ImageSet:
   files = glob(f"{path}/**/*(*).png")
-  return list(zip(files, [transform_image(load_image_and_apply_filter(x)).realize() for x in files]))
+  return list(zip(files, [Tensor(transform_image(load_image_and_apply_filter(x))).realize() for x in files]))
 
 
 def get_matching_paths(dataset: Tensor, chosen_image_set: ImageSet) -> list[str]: 

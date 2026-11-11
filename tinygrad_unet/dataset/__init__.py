@@ -52,27 +52,26 @@ def choose_files(patterns:list[str], training_size:int=TRAINING_SIZE, validation
 def load_image(p: str) -> Image.Image: return Image.open(p).convert("L")
 
 
-def make_array(im: Image.Image) -> np.typing.NDArray: return np.array(im, np.float16)
+def make_array(im: Image.Image) -> np.typing.NDArray[np.uint8]: return np.array(im)
 
 
-def load_image_and_apply_filter(p: str) -> np.typing.NDArray: return make_array(load_image(p))
+def load_image_and_apply_filter(p: str) -> np.typing.NDArray[np.uint8]: return make_array(load_image(p))
 
 
-def transform_image(p: np.typing.NDArray) -> Tensor:
-  im = Tensor(p) / 255 # Normalize
+def transform_image(p: np.typing.NDArray[np.uint8]) -> np.typing.NDArray[np.float16]:
+  im = (p / 255).astype(np.float32) # Normalize
   # Resize the Image to exactly INPUT_SIZE and add mirror padding if the other dimension is < INPUT_SIZE
   aspect = min(im.shape) / max(im.shape)
   desired_size = [round(x) for x in (SIZE if im.shape[0] > im.shape[1] else im.shape[0] + (SIZE - im.shape[1]) * aspect, im.shape[1] + (SIZE - im.shape[0]) * aspect if im.shape[0] > im.shape[1] else SIZE)]
   padding = [(SIZE - x) // 2 for x in desired_size]
-  im = im.interpolate(desired_size).pad((padding[1] + desired_size[1] % 2, padding[1], padding[0] + desired_size[0] % 2, padding[0]), mode = "reflect").expand(1, 1, -1, -1)
-  return im
+  for ax in (1, 0):
+    num = np.clip((np.arange(desired_size[ax]) * 2 + 1) * im.shape[ax] - desired_size[ax], 0, (im.shape[ax] - 1) * desired_size[ax] * 2)
+    low, high = np.take(im, num // (desired_size[ax] * 2), ax), np.take(im, -(-num // (desired_size[ax] * 2)), ax)
+    im = low + (high - low) * np.expand_dims(num % (desired_size[ax] * 2) / (desired_size[ax] * 2), 1 - ax)
+  return np.pad(im, ((padding[0] + desired_size[0] % 2, padding[0]), (padding[1] + desired_size[1] % 2, padding[1])), mode="reflect").astype(np.float16)[None, None]
 
 
-def load_mask(p: list[np.typing.NDArray]) -> Tensor:
-  masks = [transform_image(x) for x in p]
-  combined = masks[0]
-  for mask in masks[1:]: combined += mask
-  return combined
+def load_mask(p: list[np.typing.NDArray[np.uint8]]) -> np.typing.NDArray[np.float16]: return np.sum([transform_image(x) for x in p], axis=0)
 
 
 def get_masks(p: str) -> list[str]: return glob.glob(p + "_mask*.png")
@@ -86,15 +85,13 @@ class Dataset:
       labels = tqdm(executor.map(self.load_multiple, label_files), desc="Loading labels", total=len(label_files))
     self.images, self.labels = self.load_images(images), self.load_masks(labels)
 
-  def load_multiple(self, paths: list[str]) -> list[np.typing.NDArray]: return [make_array(load_image(x)) for x in paths]
+  def load_multiple(self, paths: list[str]) -> list[np.typing.NDArray[np.uint8]]: return [make_array(load_image(x)) for x in paths]
 
-  def load_images(self, images: list[np.typing.NDArray]) -> Tensor: return self.combine([transform_image(x) for x in images])
+  def load_images(self, images: list[np.typing.NDArray[np.uint8]]) -> Tensor: return self.combine([transform_image(x) for x in images])
 
-  def load_masks(self, files: list[list[np.typing.NDArray]]) -> Tensor: return self.combine([load_mask(x) for x in files])
+  def load_masks(self, files: list[list[np.typing.NDArray[np.uint8]]]) -> Tensor: return self.combine([load_mask(x) for x in files])
 
-  # TODO: Jitting this makes it crash in the latest tinygrad. We can uncomment this once this gets fixed.
-  # @TinyJit
-  def combine(self, slices: list[Tensor]) -> Tensor: return slices[0].stack(*slices[1:]).realize()
+  def combine(self, slices: list[np.typing.NDArray[np.float16]]) -> Tensor: return Tensor(np.stack(slices))
 
   def save(self, filename: str):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -313,7 +310,7 @@ class TrivialAugument:
     
   def post_apply(self, img: Tensor) -> Tensor: return img.interpolate((SIZE, SIZE), "nearest-exact").expand(1, 1, -1, -1)
 
-  def apply_image(self, img: Image.Image, transform: ImageTransform) -> Tensor: return self.post_apply(Tensor(make_array(transform.apply(img))) / 255)
+  def apply_image(self, img: Image.Image, transform: ImageTransform) -> Tensor: return self.post_apply(Tensor(make_array(transform.apply(img))).cast(dtypes.float16) / 255)
 
   def apply_tensor(self, img: Tensor, transform: TensorTransform, is_mask: bool) -> Tensor: return self.post_apply(transform.apply(self.unpack(img), is_mask))
 
