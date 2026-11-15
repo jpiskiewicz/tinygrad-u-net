@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from tinygrad.tensor import Tensor
+from tinygrad.dtype import dtypes
 from tinygrad.engine.jit import TinyJit
 from tinygrad.nn.optim import Adam, Optimizer
 from tinygrad.nn.state import get_parameters, load_state_dict, safe_load, safe_save, get_state_dict
@@ -76,7 +77,7 @@ def tiny_step(example: Tensor, label: Tensor, model: UNet, optimizer: Optimizer)
 def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer, beam: bool) -> Tensor:
     """Train for one epoch"""
     
-    total_loss = Tensor(0.0)
+    total_loss = Tensor(0.0, dtype=dtypes.float32)
     l = int(dataset[0].shape[0])
     indices = list(range(l))
     shuffle(indices)
