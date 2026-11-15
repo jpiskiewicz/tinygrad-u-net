@@ -326,6 +326,6 @@ class TrivialAugument:
     for i in range(len(self.images)):
       transform = choice(self.transformations)(self.transform_strength())
       image, label = self.run_transform(i, transform)
-      images.append(image)
-      labels.append(label)
-    return [images[0].stack(*images[1:]).realize(), labels[0].stack(*labels[1:]).realize()]
+      images.append(image.realize())
+      labels.append(label.realize())
+    return [Tensor.stack(*images).realize(), Tensor.stack(*labels).realize()]
