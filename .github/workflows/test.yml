@@ -26,4 +26,6 @@ jobs:
           pip install -e . --no-deps
 
       - name: Run tests
+        env:
+          DEV: CPU:CLANG:x86_64,x86-64-v3
         run: bash .githooks/pre-commit
