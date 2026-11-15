@@ -27,5 +27,5 @@ jobs:
 
       - name: Run tests
         env:
-          DEV: CPU:CLANG:x86_64,native,-avx512fp16
+          DEV: CPU:CLANG:x86_64,x86-64-v3
         run: bash .githooks/pre-commit
