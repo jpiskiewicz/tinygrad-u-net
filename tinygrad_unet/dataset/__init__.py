@@ -4,7 +4,8 @@ import glob
 import json
 import os
 # from tinygrad.engine.jit import TinyJit
-from tinygrad import Device, dtypes
+from tinygrad.device import Device
+from tinygrad.dtype import dtypes
 from tinygrad.nn.state import safe_load, safe_save
 from tinygrad.tensor import Tensor
 from tinygrad.helpers import tqdm
@@ -71,7 +72,7 @@ def transform_image(p: np.typing.NDArray[np.uint8]) -> np.typing.NDArray[np.floa
   return np.pad(im, ((padding[0] + desired_size[0] % 2, padding[0]), (padding[1] + desired_size[1] % 2, padding[1])), mode="reflect").astype(np.float16)[None, None]
 
 
-def load_mask(p: list[np.typing.NDArray[np.uint8]]) -> np.typing.NDArray[np.float16]: return np.sum([transform_image(x) for x in p], axis=0)
+def load_mask(p: list[np.typing.NDArray[np.uint8]]) -> np.typing.NDArray[np.float16]: return transform_image(np.bitwise_or.reduce(p))
 
 
 def get_masks(p: str) -> list[str]: return glob.glob(p + "_mask*.png")
@@ -201,14 +202,14 @@ class Translate(ImageTransform):
         int(size - bottom)   # bottom
     )
     return image.crop(crop_box)
-    
-    
+
+
 class SmoothDeform(TensorTransform):
   def __init__(self, strength: float):
     super().__init__(strength)
     KERNEL_SIZE = 3
     self.kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10 * self.strength, dtype=dtypes.float16)
-  
+
   def source_coords(self, in_size: int, out_size: int) -> Tensor:
       """
       This is a sampling map which pairs the output pixels to source pixels.
@@ -216,14 +217,14 @@ class SmoothDeform(TensorTransform):
       tensor maps to some place in between two pixels in the source tensor.
       """
       return Tensor.arange(out_size, dtype=dtypes.float16).add(0.5).div(out_size/in_size).sub(0.5)
-  
+
   def cubic_close(self, x: Tensor, a: float) -> Tensor: return ((a + 2) * x - (a + 3)) * x**2 + 1
-  
+
   def cubic_far(self, x: Tensor, a: float) -> Tensor: return ((a * x - 5 * a) * x + 8 * a) * x - 4 * a
-  
+
   def cubic_weights(self, t: Tensor, a: float = -0.5) -> tuple[Tensor, ...]:
       return self.cubic_far(t + 1, a), self.cubic_close(t, a), self.cubic_close(1 - t, a), self.cubic_far(2 - t, a)
-  
+
   def bicubic_conv(self, x: Tensor, i: int, base: Tensor, t: Tensor, weight_dims: tuple[sint, ...], index_dims: tuple[sint, ...]) -> Tensor:
       """
       This performs bicubic convolution in a single dimension.
@@ -235,7 +236,7 @@ class SmoothDeform(TensorTransform):
           samples = x.gather(i, idx)
           out += samples * weight.reshape(weight_dims).expand(index_dims)
       return out
-  
+
   def kernel_upscale(self, dimensions: tuple[sint, ...]) -> Tensor:
     """
     Perform bicubic interpolation on the kernel in order to bring it up to the provided dimensions.
@@ -249,7 +250,7 @@ class SmoothDeform(TensorTransform):
         index_dims = dimensions[0], dimensions[1] if i == 1 else self.kernel.shape[1], 2
         x = self.bicubic_conv(x, i, base, t, weight_dims, index_dims)
     return x
-    
+
   def remap_nb(self, image: Tensor, xs: Tensor, ys: Tensor) -> Tensor:
       """
       This remaps the image pixels using nearest-neighbour using the x and y coordinate maps.
@@ -258,7 +259,7 @@ class SmoothDeform(TensorTransform):
       nothing so they get lost.
       """
       return image[ys.round().cast(dtypes.int), xs.round().cast(dtypes.int)].reshape(1, 1, *image.shape)
-  
+
   def remap_bicubic(self, image: Tensor, xs: Tensor, ys: Tensor) -> Tensor:
       """
       This takes in the image and two x and y coordinate maps.
@@ -272,16 +273,16 @@ class SmoothDeform(TensorTransform):
       ty = ys - y0
       wxs = self.cubic_weights(tx)
       wys = self.cubic_weights(ty)
-  
+
       def sample(ox: int, oy: int) -> Tensor: return image[y0 + oy, x0 + ox]
-  
+
       row0 = sample(-1, -1) * wxs[0] + sample(0, -1) * wxs[1] + sample(1, -1) * wxs[2] + sample(2, -1) * wxs[3]
       row1 = sample(-1, 0) * wxs[0] + sample(0, 0) * wxs[1] + sample(1, 0) * wxs[2] + sample(2, 0) * wxs[3]
       row2 = sample(-1, 1) * wxs[0] + sample(0, 1) * wxs[1] + sample(1, 1) * wxs[2] + sample(2, 1) * wxs[3]
       row3 = sample(-1, 2) * wxs[0] + sample(0, 2) * wxs[1] + sample(1, 2) * wxs[2] + sample(2, 2) * wxs[3]
-  
+
       return (row0 * wys[0] + row1 * wys[1] + row2 * wys[2] + row3 * wys[3]).reshape(1, 1, *image.shape)
-    
+
   @override
   def apply(self, image: Tensor, is_mask: bool) -> Tensor:
     shift_map = self.kernel_upscale(image.shape)
@@ -289,7 +290,7 @@ class SmoothDeform(TensorTransform):
     shift_map_y = shift_map.gather(2, Tensor(1).repeat(image.shape[0] * image.shape[1]).reshape(*image.shape, 1)).reshape(image.shape)
     xs = Tensor.arange(image.shape[1]).reshape(1, image.shape[1]).expand(image.shape).add(shift_map_x).clip(0, image.shape[1] - 1)
     ys = Tensor.arange(image.shape[0]).reshape(image.shape[0], 1).expand(image.shape).add(shift_map_y).clip(0, image.shape[0] - 1)
-    return self.remap_nb(image, xs, ys) if is_mask else self.remap_bicubic(image, xs, ys) 
+    return self.remap_nb(image, xs, ys) if is_mask else self.remap_bicubic(image, xs, ys)
 
 
 class TrivialAugument:
@@ -305,9 +306,9 @@ class TrivialAugument:
     self.images, self.labels = [Image.fromarray(make_8bit(x)) for x in self.image_tensors], [Image.fromarray(make_8bit(x)) for x in self.label_tensors]
     self.transformations = [Rotate, Zoom, Translate, SmoothDeform]
     self.transform_strength = transform_strength
-    
+
   def unpack(self, x: Tensor) -> Tensor: return x.reshape(x.shape[2], x.shape[3])
-    
+
   def post_apply(self, img: Tensor) -> Tensor: return img.interpolate((SIZE, SIZE), "nearest-exact").expand(1, 1, -1, -1)
 
   def apply_image(self, img: Image.Image, transform: ImageTransform) -> Tensor: return self.post_apply(Tensor(make_array(transform.apply(img))).cast(dtypes.float16) / 255)
