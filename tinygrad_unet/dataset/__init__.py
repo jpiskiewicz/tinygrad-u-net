@@ -208,7 +208,12 @@ class SmoothDeform(TensorTransform):
   def __init__(self, strength: float):
     super().__init__(strength)
     KERNEL_SIZE = 3
-    self.kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10 * self.strength, dtype=dtypes.float16)
+    kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10 * self.strength, dtype=dtypes.float16)
+    shift_map = self.kernel_upscale(kernel)
+    shift_map_x = shift_map[:, :, 0]
+    shift_map_y = shift_map[:, :, 1]
+    self.xs = Tensor.arange(SIZE).reshape(1, SIZE).expand(SIZE, SIZE).add(shift_map_x).clip(0, SIZE - 1).realize()
+    self.ys = Tensor.arange(SIZE).reshape(SIZE, 1).expand(SIZE, SIZE).add(shift_map_y).clip(0, SIZE - 1).realize()
 
   def source_coords(self, in_size: int, out_size: int) -> Tensor:
       """
@@ -237,17 +242,17 @@ class SmoothDeform(TensorTransform):
           out += samples * weight.reshape(weight_dims).expand(index_dims)
       return out
 
-  def kernel_upscale(self, dimensions: tuple[sint, ...]) -> Tensor:
+  def kernel_upscale(self, kernel: Tensor) -> Tensor:
     """
     Perform bicubic interpolation on the kernel in order to bring it up to the provided dimensions.
     """
-    x = self.kernel
+    x = kernel
     for i in range(2): # Bicubic convolution is a separable operation
-        src = self.source_coords(int(self.kernel.shape[i]), int(dimensions[i]))
+        src = self.source_coords(int(kernel.shape[i]), SIZE)
         base = src.floor().cast(dtypes.int)
         t = src - base
-        weight_dims = dimensions[0] if i == 0 else 1, dimensions[1] if i == 1 else 1, 1
-        index_dims = dimensions[0], dimensions[1] if i == 1 else self.kernel.shape[1], 2
+        weight_dims = SIZE if i == 0 else 1, SIZE if i == 1 else 1, 1
+        index_dims = SIZE, SIZE if i == 1 else kernel.shape[1], 2
         x = self.bicubic_conv(x, i, base, t, weight_dims, index_dims)
     return x
 
@@ -285,12 +290,7 @@ class SmoothDeform(TensorTransform):
 
   @override
   def apply(self, image: Tensor, is_mask: bool) -> Tensor:
-    shift_map = self.kernel_upscale(image.shape)
-    shift_map_x = shift_map.gather(2, Tensor(0).repeat(image.shape[0] * image.shape[1]).reshape(*image.shape, 1)).reshape(image.shape)
-    shift_map_y = shift_map.gather(2, Tensor(1).repeat(image.shape[0] * image.shape[1]).reshape(*image.shape, 1)).reshape(image.shape)
-    xs = Tensor.arange(image.shape[1]).reshape(1, image.shape[1]).expand(image.shape).add(shift_map_x).clip(0, image.shape[1] - 1)
-    ys = Tensor.arange(image.shape[0]).reshape(image.shape[0], 1).expand(image.shape).add(shift_map_y).clip(0, image.shape[0] - 1)
-    return self.remap_nb(image, xs, ys) if is_mask else self.remap_bicubic(image, xs, ys)
+    return self.remap_nb(image, self.xs, self.ys) if is_mask else self.remap_bicubic(image, self.xs, self.ys)
 
 
 class TrivialAugument:
@@ -326,6 +326,6 @@ class TrivialAugument:
     for i in range(len(self.images)):
       transform = choice(self.transformations)(self.transform_strength())
       image, label = self.run_transform(i, transform)
-      images.append(image)
-      labels.append(label)
-    return [images[0].stack(*images[1:]).realize(), labels[0].stack(*labels[1:]).realize()]
+      images.append(image.realize())
+      labels.append(label.realize())
+    return [Tensor.stack(*images).realize(), Tensor.stack(*labels).realize()]
