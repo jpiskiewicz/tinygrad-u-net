@@ -16,7 +16,7 @@ from PIL import Image, ImageFilter
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from abc import ABC, abstractmethod
-from typing import Callable, override
+from typing import Callable, override, final
 import math
 
 
@@ -103,22 +103,28 @@ class Transform[T](ABC):
   def __init__(self, strength: float):
     self.strength: float = strength
 
+  @abstractmethod
+  def apply(self, image: T, mask: T) -> tuple[T, T]: pass
+
+
+type ImagePair = tuple[Image.Image, Image.Image]
+type TensorPair = tuple[Tensor, Tensor]
+
 
 class ImageTransform(Transform[Image.Image], ABC):
   @override
   @abstractmethod
-  def apply(self, image: Image.Image) -> Image.Image: pass
+  def apply(self, image: Image.Image, mask: Image.Image) -> ImagePair: pass
 
 
 class TensorTransform(Transform[Tensor], ABC):
   @override
   @abstractmethod
-  def apply(self, image: Tensor, is_mask: bool) -> Tensor: pass
+  def apply(self, image: Tensor, mask: Tensor) -> TensorPair: pass
 
-
+@final
 class Rotate(ImageTransform):
-  @override
-  def apply(self, image: Image.Image) -> Image.Image:
+  def apply_one(self, image: Image.Image) -> Image.Image:
     angle = self.strength * 45
     # Original dimensions
     w, h = image.size
@@ -164,20 +170,31 @@ class Rotate(ImageTransform):
 
     return cropped
 
+  @override
+  def apply(self, image: Image.Image, mask: Image.Image) -> ImagePair:
+    return self.apply_one(image), self.apply_one(mask)
 
+
+@final
 class Zoom(ImageTransform):
-  @override
-  def apply(self, image: Image.Image) -> Image.Image:
-    # TODO: Maybe add support for zooming out and reflect?
+  def __init__(self, strength: float):
+    super().__init__(strength)
     crop = SIZE * self.strength * 0.25
-    border = crop // 2
-    return image.crop((border, border, SIZE - border, SIZE - border))
+    self.border = crop // 2
 
+  def apply_one(self, image: Image.Image) -> Image.Image:
+    return image.crop((self.border, self.border, SIZE - self.border, SIZE - self.border))
 
-class Translate(ImageTransform):
   @override
-  def apply(self, image: Image.Image) -> Image.Image:
-    size = image.size[0]          # since square → width = height
+  def apply(self, image: Image.Image, mask: Image.Image) -> ImagePair: return self.apply_one(image), self.apply_one(mask)
+
+
+@final
+class Translate(ImageTransform):
+  def __init__(self, strength: float):
+    super().__init__(strength)
+
+    size = SIZE          # since square → width = height
     max_shift = size * 0.25     # 25% of side length
 
     # Angle: 0° = right, 90° = down, 180° = left, 270° = up
@@ -195,15 +212,20 @@ class Translate(ImageTransform):
     bottom = max(0, -dy)     # crop bottom when moving content up
 
     # Create crop box (all values are safe since max_shift = 0.25×size)
-    crop_box = (
+    self.crop_box = (
         int(left),           # left
         int(top),            # top
         int(size - right),   # right
         int(size - bottom)   # bottom
     )
-    return image.crop(crop_box)
 
 
+  @override
+  def apply(self, image: Image.Image, mask: Image.Image) -> ImagePair:
+    return image.crop(self.crop_box), mask.crop(self.crop_box)
+
+
+@final
 class SmoothDeform(TensorTransform):
   def __init__(self, strength: float):
     super().__init__(strength)
@@ -290,8 +312,8 @@ class SmoothDeform(TensorTransform):
       return (row0 * wys[0] + row1 * wys[1] + row2 * wys[2] + row3 * wys[3]).reshape(1, 1, *image.shape)
 
   @override
-  def apply(self, image: Tensor, is_mask: bool) -> Tensor:
-    return self.remap_nb(image, self.xs, self.ys) if is_mask else self.remap_bicubic(image, self.xs, self.ys)
+  def apply(self, image: Tensor, mask: Tensor) -> TensorPair:
+    return self.remap_bicubic(image, self.xs, self.ys), self.remap_nb(mask, self.xs, self.ys)
 
 
 class TrivialAugument:
@@ -312,13 +334,21 @@ class TrivialAugument:
 
   def post_apply(self, img: Tensor) -> Tensor: return img.interpolate((SIZE, SIZE), "nearest-exact").expand(1, 1, -1, -1)
 
-  def apply_image(self, img: Image.Image, transform: ImageTransform) -> Tensor: return self.post_apply(Tensor(make_array(transform.apply(img))).cast(dtypes.float16) / 255)
+  def apply_image(self, img: Image.Image, mask: Image.Image, transform: ImageTransform) -> TensorPair:
+    def convert(x: Image.Image):
+      return self.post_apply(Tensor(make_array(x)).cast(dtypes.float16) / 255)
+    image, label = transform.apply(img, mask)
+    return convert(image), convert(label)
 
-  def apply_tensor(self, img: Tensor, transform: TensorTransform, is_mask: bool) -> Tensor: return self.post_apply(transform.apply(self.unpack(img), is_mask))
+  def apply_tensor(self, img: Tensor, mask: Tensor, transform: TensorTransform) -> TensorPair:
+    def convert(x: Tensor):
+      return self.post_apply(x)
+    image, label = transform.apply(self.unpack(img), self.unpack(mask))
+    return convert(image), convert(label)
 
-  def run_transform(self, i: int, transform: ImageTransform | TensorTransform) -> tuple[Tensor, Tensor]:
-    if isinstance(transform, ImageTransform): return self.apply_image(self.images[i], transform), self.apply_image(self.labels[i], transform)
-    return self.apply_tensor(self.image_tensors[i], transform, False), self.apply_tensor(self.label_tensors[i], transform, True)
+  def run_transform(self, i: int, transform: ImageTransform | TensorTransform) -> TensorPair:
+    if isinstance(transform, ImageTransform): return self.apply_image(self.images[i], self.labels[i], transform)
+    return self.apply_tensor(self.image_tensors[i], self.label_tensors[i], transform)
 
   def augument(self) -> list[Tensor]:
     print("Performing TrivialAugument on the dataset...")
