@@ -212,8 +212,9 @@ class SmoothDeform(TensorTransform):
     shift_map = self.kernel_upscale(kernel)
     shift_map_x = shift_map[:, :, 0]
     shift_map_y = shift_map[:, :, 1]
-    self.xs = Tensor.arange(SIZE).reshape(1, SIZE).expand(SIZE, SIZE).add(shift_map_x).clip(0, SIZE - 1).realize()
-    self.ys = Tensor.arange(SIZE).reshape(SIZE, 1).expand(SIZE, SIZE).add(shift_map_y).clip(0, SIZE - 1).realize()
+    self.xs = Tensor.arange(SIZE).reshape(1, SIZE).expand(SIZE, SIZE).add(shift_map_x).clip(0, SIZE - 1)
+    self.ys = Tensor.arange(SIZE).reshape(SIZE, 1).expand(SIZE, SIZE).add(shift_map_y).clip(0, SIZE - 1)
+    self.xs.realize(self.ys)
 
   def source_coords(self, in_size: int, out_size: int) -> Tensor:
       """
@@ -326,6 +327,7 @@ class TrivialAugument:
     for i in range(len(self.images)):
       transform = choice(self.transformations)(self.transform_strength())
       image, label = self.run_transform(i, transform)
-      images.append(image.realize())
-      labels.append(label.realize())
+      image.realize(label)
+      images.append(image)
+      labels.append(label)
     return [Tensor.stack(*images).realize(), Tensor.stack(*labels).realize()]
