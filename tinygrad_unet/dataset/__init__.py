@@ -3,12 +3,13 @@
 import glob
 import json
 import os
-# from tinygrad.engine.jit import TinyJit
+from tinygrad import Variable
+from tinygrad.engine.jit import TinyJit
 from tinygrad.device import Device
 from tinygrad.dtype import dtypes
 from tinygrad.nn.state import safe_load, safe_save
 from tinygrad.tensor import Tensor
-from tinygrad.helpers import tqdm
+from tinygrad.helpers import tqdm, Context
 from tinygrad_unet.util import make_8bit
 from tinygrad.uop.ops import sint
 from random import shuffle, choice, random
@@ -16,7 +17,7 @@ from PIL import Image, ImageFilter
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from abc import ABC, abstractmethod
-from typing import Callable, override
+from typing import cast, Callable, override, final
 import math
 
 
@@ -103,22 +104,28 @@ class Transform[T](ABC):
   def __init__(self, strength: float):
     self.strength: float = strength
 
+  @abstractmethod
+  def apply(self, image: T, mask: T) -> tuple[T, T]: pass
+
+
+type ImagePair = tuple[Image.Image, Image.Image]
+type TensorPair = tuple[Tensor, Tensor]
+
 
 class ImageTransform(Transform[Image.Image], ABC):
   @override
   @abstractmethod
-  def apply(self, image: Image.Image) -> Image.Image: pass
+  def apply(self, image: Image.Image, mask: Image.Image) -> ImagePair: pass
 
 
 class TensorTransform(Transform[Tensor], ABC):
   @override
   @abstractmethod
-  def apply(self, image: Tensor, is_mask: bool) -> Tensor: pass
+  def apply(self, image: Tensor, mask: Tensor) -> TensorPair: pass
 
-
+@final
 class Rotate(ImageTransform):
-  @override
-  def apply(self, image: Image.Image) -> Image.Image:
+  def apply_one(self, image: Image.Image) -> Image.Image:
     angle = self.strength * 45
     # Original dimensions
     w, h = image.size
@@ -164,20 +171,31 @@ class Rotate(ImageTransform):
 
     return cropped
 
+  @override
+  def apply(self, image: Image.Image, mask: Image.Image) -> ImagePair:
+    return self.apply_one(image), self.apply_one(mask)
 
+
+@final
 class Zoom(ImageTransform):
-  @override
-  def apply(self, image: Image.Image) -> Image.Image:
-    # TODO: Maybe add support for zooming out and reflect?
+  def __init__(self, strength: float):
+    super().__init__(strength)
     crop = SIZE * self.strength * 0.25
-    border = crop // 2
-    return image.crop((border, border, SIZE - border, SIZE - border))
+    self.border = crop // 2
 
+  def apply_one(self, image: Image.Image) -> Image.Image:
+    return image.crop((self.border, self.border, SIZE - self.border, SIZE - self.border))
 
-class Translate(ImageTransform):
   @override
-  def apply(self, image: Image.Image) -> Image.Image:
-    size = image.size[0]          # since square → width = height
+  def apply(self, image: Image.Image, mask: Image.Image) -> ImagePair: return self.apply_one(image), self.apply_one(mask)
+
+
+@final
+class Translate(ImageTransform):
+  def __init__(self, strength: float):
+    super().__init__(strength)
+
+    size = SIZE          # since square → width = height
     max_shift = size * 0.25     # 25% of side length
 
     # Angle: 0° = right, 90° = down, 180° = left, 270° = up
@@ -195,25 +213,27 @@ class Translate(ImageTransform):
     bottom = max(0, -dy)     # crop bottom when moving content up
 
     # Create crop box (all values are safe since max_shift = 0.25×size)
-    crop_box = (
+    self.crop_box = (
         int(left),           # left
         int(top),            # top
         int(size - right),   # right
         int(size - bottom)   # bottom
     )
-    return image.crop(crop_box)
 
 
+  @override
+  def apply(self, image: Image.Image, mask: Image.Image) -> ImagePair:
+    return image.crop(self.crop_box), mask.crop(self.crop_box)
+
+
+@final
 class SmoothDeform(TensorTransform):
   def __init__(self, strength: float):
     super().__init__(strength)
     KERNEL_SIZE = 3
-    kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10 * self.strength, dtype=dtypes.float16)
-    shift_map = self.kernel_upscale(kernel)
-    shift_map_x = shift_map[:, :, 0]
-    shift_map_y = shift_map[:, :, 1]
-    self.xs = Tensor.arange(SIZE).reshape(1, SIZE).expand(SIZE, SIZE).add(shift_map_x).clip(0, SIZE - 1).realize()
-    self.ys = Tensor.arange(SIZE).reshape(SIZE, 1).expand(SIZE, SIZE).add(shift_map_y).clip(0, SIZE - 1).realize()
+    # with Context(BEAM=0):
+    #   self.kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10 * self.strength, dtype=dtypes.float16).realize()
+    self.kernel = Tensor(np.random.normal(loc=0, scale=10 * strength, size=(KERNEL_SIZE, KERNEL_SIZE, 2)).astype(np.float16), device=Device.DEFAULT).realize()
 
   def source_coords(self, in_size: int, out_size: int) -> Tensor:
       """
@@ -256,6 +276,14 @@ class SmoothDeform(TensorTransform):
         x = self.bicubic_conv(x, i, base, t, weight_dims, index_dims)
     return x
 
+  def construct_sampling_maps(self, kernel: Tensor) -> TensorPair:
+    shift_map = self.kernel_upscale(kernel)
+    shift_map_x = shift_map[:, :, 0]
+    shift_map_y = shift_map[:, :, 1]
+    xs = Tensor.arange(SIZE).reshape(1, SIZE).expand(SIZE, SIZE).add(shift_map_x).clip(0, SIZE - 1)
+    ys = Tensor.arange(SIZE).reshape(SIZE, 1).expand(SIZE, SIZE).add(shift_map_y).clip(0, SIZE - 1)
+    return xs, ys
+
   def remap_nb(self, image: Tensor, xs: Tensor, ys: Tensor) -> Tensor:
       """
       This remaps the image pixels using nearest-neighbour using the x and y coordinate maps.
@@ -288,9 +316,17 @@ class SmoothDeform(TensorTransform):
 
       return (row0 * wys[0] + row1 * wys[1] + row2 * wys[2] + row3 * wys[3]).reshape(1, 1, *image.shape)
 
+  @TinyJit
+  def smooth_deform(self, kernel: Tensor, image: Tensor, mask: Tensor) -> TensorPair:
+    xs, ys = self.construct_sampling_maps(kernel)
+    return self.remap_bicubic(image, xs, ys), self.remap_nb(mask, xs, ys)
+
   @override
-  def apply(self, image: Tensor, is_mask: bool) -> Tensor:
-    return self.remap_nb(image, self.xs, self.ys) if is_mask else self.remap_bicubic(image, self.xs, self.ys)
+  def apply(self, image: Tensor, mask: Tensor) -> TensorPair:
+     # tinygrad wraps jitted functions into a getter method which doesn't have any typing set up.
+     # That's why we need to explicitly cast the return value of smooth_deform.
+     # https://github.com/tinygrad/tinygrad/blob/master/tinygrad/engine/jit.py?utm_source=chatgpt.com#L120
+    return cast(TensorPair, self.smooth_deform(self.kernel, image, mask))
 
 
 class TrivialAugument:
@@ -307,25 +343,44 @@ class TrivialAugument:
     self.transformations = [Rotate, Zoom, Translate, SmoothDeform]
     self.transform_strength = transform_strength
 
-  def unpack(self, x: Tensor) -> Tensor: return x.reshape(x.shape[2], x.shape[3])
+  def convert_img_to_out_tensor(self, x: Image.Image) -> Tensor:
+    return (Tensor(make_array(x)).cast(dtypes.float16) / 255).reshape(1, 1, SIZE, SIZE)
 
-  def post_apply(self, img: Tensor) -> Tensor: return img.interpolate((SIZE, SIZE), "nearest-exact").expand(1, 1, -1, -1)
+  def apply_image(self, img: Image.Image, mask: Image.Image, transform: ImageTransform) -> TensorPair:
+    transformed_img, transformed_mask = transform.apply(img, mask)
+    transformed_img = transformed_img.resize((SIZE, SIZE), Image.Resampling.BICUBIC)
+    transformed_mask = transformed_mask.resize((SIZE, SIZE), Image.Resampling.NEAREST)
+    out = self.convert_img_to_out_tensor(transformed_img), self.convert_img_to_out_tensor(transformed_mask)
+    return cast(TensorPair, out)
 
-  def apply_image(self, img: Image.Image, transform: ImageTransform) -> Tensor: return self.post_apply(Tensor(make_array(transform.apply(img))).cast(dtypes.float16) / 255)
+  def apply_tensor(self, img: Tensor, mask: Tensor, transform: TensorTransform) -> TensorPair: return transform.apply(img, mask)
+    
+  @TinyJit
+  def extract_pair(self, images: Tensor, masks: Tensor, index: Tensor) -> TensorPair:
+    image, mask = images[index].reshape(SIZE, SIZE).contiguous(), masks[index].reshape(SIZE, SIZE).contiguous()
+    image.realize(mask)
+    return image, mask
+    
+  def get_tensor_index(self, i: int) -> Tensor: return Tensor([i], dtype=dtypes.int, device=Device.DEFAULT).realize()
 
-  def apply_tensor(self, img: Tensor, transform: TensorTransform, is_mask: bool) -> Tensor: return self.post_apply(transform.apply(self.unpack(img), is_mask))
-
-  def run_transform(self, i: int, transform: ImageTransform | TensorTransform) -> tuple[Tensor, Tensor]:
-    if isinstance(transform, ImageTransform): return self.apply_image(self.images[i], transform), self.apply_image(self.labels[i], transform)
-    return self.apply_tensor(self.image_tensors[i], transform, False), self.apply_tensor(self.label_tensors[i], transform, True)
-
+  def run_transform(self, i: int, transform: ImageTransform | TensorTransform) -> TensorPair:
+    if isinstance(transform, ImageTransform): return self.apply_image(self.images[i], self.labels[i], transform)
+    tensor_index = self.get_tensor_index(i)
+    image, mask = cast(TensorPair, self.extract_pair(self.image_tensors, self.label_tensors, tensor_index))
+    return self.apply_tensor(image, mask, transform)
+    
   def augument(self) -> list[Tensor]:
     print("Performing TrivialAugument on the dataset...")
-    images: list[Tensor] = []
-    labels: list[Tensor] = []
-    for i in range(len(self.images)):
+    count = len(self.images)
+    shape = (count, 1, 1, SIZE, SIZE)
+    images, labels = Tensor.empty(shape, dtype=dtypes.float16).realize(), Tensor.empty(shape, dtype=dtypes.float16).realize()
+    for i in range(count):
       transform = choice(self.transformations)(self.transform_strength())
       image, label = self.run_transform(i, transform)
-      images.append(image.realize())
-      labels.append(label.realize())
-    return [Tensor.stack(*images).realize(), Tensor.stack(*labels).realize()]
+      image.realize(label)
+      tensor_index = Variable("tensor_index", 0, count - 1).bind(i)
+      images[tensor_index].assign(image)
+      labels[tensor_index].assign(label)
+      images.realize(labels)
+    return [images, labels]
+      

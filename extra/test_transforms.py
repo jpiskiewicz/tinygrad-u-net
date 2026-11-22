@@ -31,7 +31,7 @@ def arrange_on_grid(images: list[Image.Image], titles: list[str], output: str):
   
 class Original(TensorTransform):
   @override
-  def apply(self, image: Tensor, is_mask: bool) -> Tensor: return image
+  def apply(self, image: Tensor, mask: Tensor) -> tuple[Tensor, Tensor]: return image.reshape(1, 1, *image.shape), mask.reshape(1, 1, *mask.shape)
   
   
 def convert_to_image(tensors: tuple[Tensor, Tensor]) -> tuple[Image.Image, Image.Image]:
@@ -49,7 +49,7 @@ if __name__ == "__main__":
   print("Loading dataset...")
   dataset = load_dataset(args.dataset)
   print("Creating TrivialAugument and converting dataset to Pillow Image instances...")
-  aug = TrivialAugument([[dataset[0][args.index]], [dataset[1][args.index]]])
+  aug = TrivialAugument([dataset[0][args.index:args.index+1], dataset[1][args.index:args.index+1]])
   print("Running transforms...")
   transform_builders = [Original, *aug.transformations]
   transforms = [x(args.magnitude) for x in transform_builders]

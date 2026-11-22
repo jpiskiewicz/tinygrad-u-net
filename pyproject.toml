@@ -18,6 +18,7 @@ packages = [
 ]
 
 [tool.pyright]
+include = ["tinygrad_unet", "scripts", "tests", "extra"]
 extraPaths = ["tinygrad"]
 
 [tool.pytest.ini_options]
