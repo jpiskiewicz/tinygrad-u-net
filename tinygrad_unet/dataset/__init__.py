@@ -307,14 +307,14 @@ class SmoothDeform(TensorTransform):
       wxs = self.cubic_weights(tx)
       wys = self.cubic_weights(ty)
 
-      def sample(ox: int, oy: int) -> Tensor: return image[y0 + oy, x0 + ox]
+      def sample(ox: int, oy: int) -> Tensor: return image[(y0 + oy).clip(0, image.shape[0] - 1), (x0 + ox).clip(0, image.shape[1] - 1)]
 
       row0 = sample(-1, -1) * wxs[0] + sample(0, -1) * wxs[1] + sample(1, -1) * wxs[2] + sample(2, -1) * wxs[3]
       row1 = sample(-1, 0) * wxs[0] + sample(0, 0) * wxs[1] + sample(1, 0) * wxs[2] + sample(2, 0) * wxs[3]
       row2 = sample(-1, 1) * wxs[0] + sample(0, 1) * wxs[1] + sample(1, 1) * wxs[2] + sample(2, 1) * wxs[3]
       row3 = sample(-1, 2) * wxs[0] + sample(0, 2) * wxs[1] + sample(1, 2) * wxs[2] + sample(2, 2) * wxs[3]
 
-      return (row0 * wys[0] + row1 * wys[1] + row2 * wys[2] + row3 * wys[3]).reshape(1, 1, *image.shape)
+      return (row0 * wys[0] + row1 * wys[1] + row2 * wys[2] + row3 * wys[3]).clamp(0, 1).reshape(1, 1, *image.shape)
 
   @TinyJit
   def smooth_deform(self, kernel: Tensor, image: Tensor, mask: Tensor) -> TensorPair:
