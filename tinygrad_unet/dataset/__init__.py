@@ -8,7 +8,7 @@ from tinygrad.device import Device
 from tinygrad.dtype import dtypes
 from tinygrad.nn.state import safe_load, safe_save
 from tinygrad.tensor import Tensor
-from tinygrad.helpers import tqdm
+from tinygrad.helpers import tqdm, Context
 from tinygrad_unet.util import make_8bit
 from tinygrad.uop.ops import sint
 from random import shuffle, choice, random
@@ -230,7 +230,9 @@ class SmoothDeform(TensorTransform):
   def __init__(self, strength: float):
     super().__init__(strength)
     KERNEL_SIZE = 3
-    self.kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10 * self.strength, dtype=dtypes.float16)
+    # with Context(BEAM=0):
+    #   self.kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10 * self.strength, dtype=dtypes.float16).realize()
+    self.kernel = Tensor(np.random.normal(loc=0, scale=10 * strength, size=(KERNEL_SIZE, KERNEL_SIZE, 2)).astype(np.float16), device=Device.DEFAULT).realize()
 
   def source_coords(self, in_size: int, out_size: int) -> Tensor:
       """
@@ -340,34 +342,40 @@ class TrivialAugument:
     self.transformations = [Rotate, Zoom, Translate, SmoothDeform]
     self.transform_strength = transform_strength
 
-  def unpack(self, x: Tensor) -> Tensor: return x.reshape(x.shape[2], x.shape[3])
-
-  def post_apply(self, img: Tensor) -> Tensor: return img.interpolate((SIZE, SIZE), "nearest-exact").expand(1, 1, -1, -1)
+  def convert_img_to_out_tensor(self, x: Image.Image) -> Tensor:
+    return (Tensor(make_array(x)).cast(dtypes.float16) / 255).reshape(1, 1, SIZE, SIZE)
 
   def apply_image(self, img: Image.Image, mask: Image.Image, transform: ImageTransform) -> TensorPair:
-    def convert(x: Image.Image):
-      return self.post_apply(Tensor(make_array(x)).cast(dtypes.float16) / 255)
-    image, label = transform.apply(img, mask)
-    return convert(image), convert(label)
+    transformed_img, transformed_mask = transform.apply(img, mask)
+    transformed_img = transformed_img.resize((SIZE, SIZE), Image.Resampling.BICUBIC)
+    transformed_mask = transformed_mask.resize((SIZE, SIZE), Image.Resampling.NEAREST)
+    out = self.convert_img_to_out_tensor(transformed_img), self.convert_img_to_out_tensor(transformed_mask)
+    return cast(TensorPair, out)
 
-  def apply_tensor(self, img: Tensor, mask: Tensor, transform: TensorTransform) -> TensorPair:
-    def convert(x: Tensor):
-      return self.post_apply(x)
-    image, label = transform.apply(self.unpack(img), self.unpack(mask))
-    return convert(image), convert(label)
+  def apply_tensor(self, img: Tensor, mask: Tensor, transform: TensorTransform) -> TensorPair: return transform.apply(img, mask)
+    
+  @TinyJit
+  def extract_pair(self, images: Tensor, masks: Tensor, index: Tensor) -> TensorPair:
+    image, mask = images[index].reshape(SIZE, SIZE).contiguous(), masks[index].reshape(SIZE, SIZE).contiguous()
+    image.realize(mask)
+    return image, mask
 
   def run_transform(self, i: int, transform: ImageTransform | TensorTransform) -> TensorPair:
     if isinstance(transform, ImageTransform): return self.apply_image(self.images[i], self.labels[i], transform)
-    return self.apply_tensor(self.image_tensors[i], self.label_tensors[i], transform)
-
+    tensor_index = Tensor([i], dtype=dtypes.int, device=Device.DEFAULT).realize()
+    image, mask = cast(TensorPair, self.extract_pair(self.image_tensors, self.label_tensors, tensor_index))
+    return self.apply_tensor(image, mask, transform)
+    
   def augument(self) -> list[Tensor]:
     print("Performing TrivialAugument on the dataset...")
     images: list[Tensor] = []
     labels: list[Tensor] = []
+    print(self.image_tensors[0].shape)
     for i in range(len(self.images)):
       transform = choice(self.transformations)(self.transform_strength())
       image, label = self.run_transform(i, transform)
       image.realize(label)
       images.append(image)
       labels.append(label)
+      
     return [Tensor.stack(*images).realize(), Tensor.stack(*labels).realize()]
