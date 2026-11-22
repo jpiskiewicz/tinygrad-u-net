@@ -3,7 +3,7 @@
 import glob
 import json
 import os
-# from tinygrad.engine.jit import TinyJit
+from tinygrad.engine.jit import TinyJit
 from tinygrad.device import Device
 from tinygrad.dtype import dtypes
 from tinygrad.nn.state import safe_load, safe_save
@@ -16,7 +16,7 @@ from PIL import Image, ImageFilter
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from abc import ABC, abstractmethod
-from typing import Callable, override, final
+from typing import cast, Callable, override, final
 import math
 
 
@@ -230,13 +230,7 @@ class SmoothDeform(TensorTransform):
   def __init__(self, strength: float):
     super().__init__(strength)
     KERNEL_SIZE = 3
-    kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10 * self.strength, dtype=dtypes.float16)
-    shift_map = self.kernel_upscale(kernel)
-    shift_map_x = shift_map[:, :, 0]
-    shift_map_y = shift_map[:, :, 1]
-    self.xs = Tensor.arange(SIZE).reshape(1, SIZE).expand(SIZE, SIZE).add(shift_map_x).clip(0, SIZE - 1)
-    self.ys = Tensor.arange(SIZE).reshape(SIZE, 1).expand(SIZE, SIZE).add(shift_map_y).clip(0, SIZE - 1)
-    self.xs.realize(self.ys)
+    self.kernel = Tensor.normal((KERNEL_SIZE, KERNEL_SIZE, 2), mean=0, std=10 * self.strength, dtype=dtypes.float16)
 
   def source_coords(self, in_size: int, out_size: int) -> Tensor:
       """
@@ -279,6 +273,14 @@ class SmoothDeform(TensorTransform):
         x = self.bicubic_conv(x, i, base, t, weight_dims, index_dims)
     return x
 
+  def construct_sampling_maps(self, kernel: Tensor) -> TensorPair:
+    shift_map = self.kernel_upscale(kernel)
+    shift_map_x = shift_map[:, :, 0]
+    shift_map_y = shift_map[:, :, 1]
+    xs = Tensor.arange(SIZE).reshape(1, SIZE).expand(SIZE, SIZE).add(shift_map_x).clip(0, SIZE - 1)
+    ys = Tensor.arange(SIZE).reshape(SIZE, 1).expand(SIZE, SIZE).add(shift_map_y).clip(0, SIZE - 1)
+    return xs, ys
+
   def remap_nb(self, image: Tensor, xs: Tensor, ys: Tensor) -> Tensor:
       """
       This remaps the image pixels using nearest-neighbour using the x and y coordinate maps.
@@ -311,9 +313,17 @@ class SmoothDeform(TensorTransform):
 
       return (row0 * wys[0] + row1 * wys[1] + row2 * wys[2] + row3 * wys[3]).reshape(1, 1, *image.shape)
 
+  @TinyJit
+  def smooth_deform(self, kernel: Tensor, image: Tensor, mask: Tensor) -> TensorPair:
+    xs, ys = self.construct_sampling_maps(kernel)
+    return self.remap_bicubic(image, xs, ys), self.remap_nb(mask, xs, ys)
+
   @override
   def apply(self, image: Tensor, mask: Tensor) -> TensorPair:
-    return self.remap_bicubic(image, self.xs, self.ys), self.remap_nb(mask, self.xs, self.ys)
+     # tinygrad wraps jitted functions into a getter method which doesn't have any typing set up.
+     # That's why we need to explicitly cast the return value of smooth_deform.
+     # https://github.com/tinygrad/tinygrad/blob/master/tinygrad/engine/jit.py?utm_source=chatgpt.com#L120
+    return cast(TensorPair, self.smooth_deform(self.kernel, image, mask))
 
 
 class TrivialAugument:
