@@ -3,6 +3,7 @@
 import glob
 import json
 import os
+from tinygrad import Variable
 from tinygrad.engine.jit import TinyJit
 from tinygrad.device import Device
 from tinygrad.dtype import dtypes
@@ -359,23 +360,27 @@ class TrivialAugument:
     image, mask = images[index].reshape(SIZE, SIZE).contiguous(), masks[index].reshape(SIZE, SIZE).contiguous()
     image.realize(mask)
     return image, mask
+    
+  def get_tensor_index(self, i: int) -> Tensor: return Tensor([i], dtype=dtypes.int, device=Device.DEFAULT).realize()
 
   def run_transform(self, i: int, transform: ImageTransform | TensorTransform) -> TensorPair:
     if isinstance(transform, ImageTransform): return self.apply_image(self.images[i], self.labels[i], transform)
-    tensor_index = Tensor([i], dtype=dtypes.int, device=Device.DEFAULT).realize()
+    tensor_index = self.get_tensor_index(i)
     image, mask = cast(TensorPair, self.extract_pair(self.image_tensors, self.label_tensors, tensor_index))
     return self.apply_tensor(image, mask, transform)
     
   def augument(self) -> list[Tensor]:
     print("Performing TrivialAugument on the dataset...")
-    images: list[Tensor] = []
-    labels: list[Tensor] = []
-    print(self.image_tensors[0].shape)
-    for i in range(len(self.images)):
+    count = len(self.images)
+    shape = (count, 1, 1, SIZE, SIZE)
+    images, labels = Tensor.empty(shape, dtype=dtypes.float16).realize(), Tensor.empty(shape, dtype=dtypes.float16).realize()
+    for i in range(count):
       transform = choice(self.transformations)(self.transform_strength())
       image, label = self.run_transform(i, transform)
       image.realize(label)
-      images.append(image)
-      labels.append(label)
+      tensor_index = Variable("tensor_index", 0, count - 1).bind(i)
+      images[tensor_index].assign(image)
+      labels[tensor_index].assign(label)
+      images.realize(labels)
+    return [images, labels]
       
-    return [Tensor.stack(*images).realize(), Tensor.stack(*labels).realize()]
