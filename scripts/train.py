@@ -169,9 +169,11 @@ if __name__ == "__main__":
   argument_parser.add_argument("-e", "--epochs", type=int)
   argument_parser.add_argument("-m", "--model-file")
   argument_parser.add_argument("-b", "--beam", type=bool, default=True)
+  argument_parser.add_argument("-d", "--dataset", default=TRAIN_DATASET)
   args = argument_parser.parse_args()
 
-  print(f"Loading validation dataset from {VAL_DATASET}...")
-  val = load_dataset(VAL_DATASET)
+  val_dataset_location = "/".join(args.dataset.split("/")[:-1]) + "/val_dataset.safetensors"
+  print(f"Loading validation dataset from {val_dataset_location}...")
+  val = load_dataset(val_dataset_location)
   print("Dataset loaded.")
-  run_training(val, args.epochs if args.epochs is not None else EPOCHS, args.model_file, args.beam, args.run_name)
+  run_training(val, args.epochs if args.epochs is not None else EPOCHS, args.model_file, args.beam, args.run_name, dataset_location=args.dataset)
