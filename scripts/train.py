@@ -74,10 +74,10 @@ def tiny_step(example: Tensor, label: Tensor, model: UNet, optimizer: Optimizer)
     return loss
 
 
-def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer, beam: bool) -> Tensor:
+def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer, beam: bool) -> float:
     """Train for one epoch"""
     
-    total_loss = Tensor(0.0, dtype=dtypes.float32)
+    total_loss = 0.0
     l = int(dataset[0].shape[0])
     indices = list(range(l))
     shuffle(indices)
@@ -88,7 +88,7 @@ def train_epoch(model: UNet, dataset: list[Tensor], optimizer: Optimizer, beam: 
         example, label = dataset[0][i].clone(), dataset[1][i].clone()
         loss = tiny_step(example, label, model, optimizer)
         # TODO: Print the gradients here to check whether they are diminishing.
-        total_loss += loss
+        total_loss += loss.item()
     
     return total_loss / l
 
@@ -131,14 +131,14 @@ def run_training(val: list[Tensor], epochs: int, model_file: str | None, beam: b
   largest_dice = 0
   start_epoch = 1 if model_file is None else int(Path(model_file).name.split("_")[2][:-12]) + 1
   for i in range(start_epoch, epochs+1):
-    epoch_msg = f"\nEpoch {i}/{epochs}"
+    epoch_msg = f"Epoch {i}/{epochs}"
     print(epoch_msg)
     train = load_augumented_dataset(i, dataset_location)
     train_loss = train_epoch(model, train, optim, beam)
-    train_loss_msg = f"Train Loss: {train_loss.numpy():.6f}"
+    train_loss_msg = f"Train Loss: {train_loss:.6f}"
     print(train_loss_msg)
     dice = validate(model, val)
-    val_msg = ", ".join([epoch_msg, train_loss_msg, f"Epoch Validation Dice: {dice:.6f}"])
+    val_msg = ", ".join([epoch_msg, train_loss_msg, f"Epoch Validation Dice: {dice:.6f}\n"])
     print(val_msg)
     scores_path = run_dir / "eval_scores.txt"
     scores_path.parent.mkdir(parents=True, exist_ok=True)
